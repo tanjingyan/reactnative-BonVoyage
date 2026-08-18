@@ -17,6 +17,9 @@ function RootNavigator() {
 
       <Stack.Protected guard={!!user}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="create-trip" />
+        <Stack.Screen name="trip/[id]" />
+        <Stack.Screen name="trip/[id]/add-activity" />
       </Stack.Protected>
     </Stack>
   );

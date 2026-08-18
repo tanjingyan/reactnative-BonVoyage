@@ -1,5 +1,19 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+
+import {
+  getAuth,
+  initializeAuth,
+  type Auth,
+
+  // Firebase React Native TypeScript declarations can fail
+  // to expose this export correctly in Expo projects.
+  // @ts-expect-error Firebase RN typings issue
+  getReactNativePersistence,
+} from 'firebase/auth';
+
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBhSNHsVDsFDWmaznkhbWVHsQLzh7gVxX0",
@@ -12,6 +26,20 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const auth = getAuth(app);
+let auth: Auth;
 
-export { app, auth };
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(
+      ReactNativeAsyncStorage
+    ),
+  });
+} catch {
+  // Used if Firebase Auth was already initialized,
+  // for example during Expo Fast Refresh.
+  auth = getAuth(app);
+}
+
+const db = getFirestore(app);
+
+export { app, auth, db };
