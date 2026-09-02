@@ -80,9 +80,9 @@ export default function TripDetailsScreen() {
     'overview'
   );
 
-  // -----------------------------
+  // =========================================================
   // LOAD TRIP
-  // -----------------------------
+  // =========================================================
 
   useEffect(() => {
     async function loadTrip() {
@@ -139,9 +139,9 @@ export default function TripDetailsScreen() {
     loadTrip();
   }, [id]);
 
-  // -----------------------------
+  // =========================================================
   // REAL-TIME ACTIVITIES
-  // -----------------------------
+  // =========================================================
 
   useEffect(() => {
     if (!id) {
@@ -175,6 +175,7 @@ export default function TripDetailsScreen() {
               })
             );
 
+          // Sort by date and then time
           activityList.sort(
             (a, b) => {
               const dateCompare =
@@ -221,9 +222,9 @@ export default function TripDetailsScreen() {
     return unsubscribe;
   }, [id]);
 
-  // -----------------------------
-  // HELPERS
-  // -----------------------------
+  // =========================================================
+  // DATE HELPERS
+  // =========================================================
 
   function formatDate(
     dateString: string
@@ -255,6 +256,10 @@ export default function TripDetailsScreen() {
       }
     );
   }
+
+  // =========================================================
+  // TRIP HERO IMAGE
+  // =========================================================
 
   function getTripImage(
     destination: string
@@ -297,6 +302,10 @@ export default function TripDetailsScreen() {
 
     return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=85';
   }
+
+  // =========================================================
+  // DELETE ACTIVITY
+  // =========================================================
 
   function handleDeleteActivity(
     activityId: string,
@@ -350,6 +359,10 @@ export default function TripDetailsScreen() {
     );
   }
 
+  // =========================================================
+  // NAVIGATION HELPERS
+  // =========================================================
+
   function openAddActivity() {
     if (!trip) {
       return;
@@ -365,9 +378,24 @@ export default function TripDetailsScreen() {
     });
   }
 
-  // -----------------------------
+  function openTripMap() {
+    if (!trip) {
+      return;
+    }
+
+    router.push({
+      pathname:
+        '/trip/[id]/map',
+
+      params: {
+        id: trip.id,
+      },
+    });
+  }
+
+  // =========================================================
   // LOADING
-  // -----------------------------
+  // =========================================================
 
   if (loading) {
     return (
@@ -385,9 +413,9 @@ export default function TripDetailsScreen() {
     return null;
   }
 
-  // -----------------------------
+  // =========================================================
   // SCREEN
-  // -----------------------------
+  // =========================================================
 
   return (
     <View
@@ -401,7 +429,9 @@ export default function TripDetailsScreen() {
           styles.scrollContent
         }
       >
-        {/* HERO IMAGE */}
+        {/* ===================================================
+            HERO IMAGE
+        ==================================================== */}
 
         <ImageBackground
           source={{
@@ -434,7 +464,9 @@ export default function TripDetailsScreen() {
           </Pressable>
         </ImageBackground>
 
-        {/* FLOATING TRIP CARD */}
+        {/* ===================================================
+            TRIP SUMMARY CARD
+        ==================================================== */}
 
         <View
           style={
@@ -465,9 +497,7 @@ export default function TripDetailsScreen() {
                 styles.destination
               }
             >
-              {
-                trip.destination
-              }
+              {trip.destination}
             </Text>
           </View>
 
@@ -510,7 +540,9 @@ export default function TripDetailsScreen() {
                   {formatDate(
                     trip.startDate
                   )}
+
                   {'  →  '}
+
                   {formatDate(
                     trip.endDate
                   )}
@@ -532,7 +564,9 @@ export default function TripDetailsScreen() {
           </View>
         </View>
 
-        {/* TAB BAR */}
+        {/* ===================================================
+            TAB BAR
+        ==================================================== */}
 
         <View
           style={styles.tabBar}
@@ -609,12 +643,16 @@ export default function TripDetailsScreen() {
           </Pressable>
         </View>
 
-        {/* OVERVIEW */}
+        {/* ===================================================
+            OVERVIEW TAB
+        ==================================================== */}
 
         {activeTab ===
           'overview' && (
           <>
-            {/* TRIP PROGRESS */}
+            {/* -----------------------------------------------
+                TRIP OVERVIEW
+            ------------------------------------------------ */}
 
             <View
               style={
@@ -655,9 +693,8 @@ export default function TripDetailsScreen() {
                       styles.activityBadgeText
                     }
                   >
-                    {
-                      activities.length
-                    }{' '}
+                    {activities.length}{' '}
+
                     {activities.length ===
                     1
                       ? 'activity'
@@ -666,7 +703,7 @@ export default function TripDetailsScreen() {
                 </View>
               </View>
 
-              {/* PLANNING CARD */}
+              {/* ITINERARY SUMMARY */}
 
               <View
                 style={
@@ -705,7 +742,12 @@ export default function TripDetailsScreen() {
                   >
                     {activities.length >
                     0
-                      ? `${activities.length} activities planned for this trip.`
+                      ? `${activities.length} ${
+                          activities.length ===
+                          1
+                            ? 'activity'
+                            : 'activities'
+                        } planned for this trip.`
                       : 'Start adding places and activities to your itinerary.'}
                   </Text>
 
@@ -728,11 +770,13 @@ export default function TripDetailsScreen() {
               </View>
             </View>
 
-            {/* TRIP TOOLS */}
+            {/* -----------------------------------------------
+                TRIP MAP FEATURE
+            ------------------------------------------------ */}
 
             <View
               style={
-                styles.toolsSection
+                styles.featuresSection
               }
             >
               <Text
@@ -740,111 +784,102 @@ export default function TripDetailsScreen() {
                   styles.sectionTitle
                 }
               >
-                Trip tools
+                Trip features
               </Text>
 
-              <View
+              <Text
                 style={
-                  styles.toolsRow
+                  styles.sectionSubtitle
                 }
               >
-                <Pressable
+                Useful tools for your
+                journey
+              </Text>
+
+              <Pressable
+                style={
+                  styles.mapFeatureCard
+                }
+                onPress={
+                  openTripMap
+                }
+              >
+                <View
                   style={
-                    styles.toolButton
-                  }
-                  onPress={
-                    openAddActivity
+                    styles.mapFeatureIcon
                   }
                 >
-                  <View
-                    style={[
-                      styles.toolIcon,
-                      styles.blueTool,
-                    ]}
+                  <Ionicons
+                    name="map-outline"
+                    size={28}
+                    color="#1769E8"
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.mapFeatureContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.mapFeatureTitle
+                    }
                   >
-                    <Ionicons
-                      name="add"
-                      size={25}
-                      color="#1769E8"
-                    />
-                  </View>
+                    Trip Map
+                  </Text>
 
                   <Text
                     style={
-                      styles.toolText
+                      styles.mapFeatureDescription
                     }
                   >
-                    Add activity
+                    View your destination
+                    and itinerary locations
+                    together on the map.
                   </Text>
-                </Pressable>
 
-                <Pressable
-                  style={
-                    styles.toolButton
-                  }
-                  onPress={() =>
-                    setActiveTab(
-                      'itinerary'
-                    )
-                  }
-                >
-                  <View
-                    style={[
-                      styles.toolIcon,
-                      styles.purpleTool,
-                    ]}
-                  >
-                    <Ionicons
-                      name="list-outline"
-                      size={24}
-                      color="#7C3AED"
-                    />
-                  </View>
+                  {activities.length >
+                  0 ? (
+                    <View
+                      style={
+                        styles.mapFeatureStatus
+                      }
+                    >
+                      <Ionicons
+                        name="location"
+                        size={13}
+                        color="#1769E8"
+                      />
 
-                  <Text
-                    style={
-                      styles.toolText
-                    }
-                  >
-                    Itinerary
-                  </Text>
-                </Pressable>
+                      <Text
+                        style={
+                          styles.mapFeatureStatusText
+                        }
+                      >
+                        {
+                          activities.length
+                        }{' '}
+                        {activities.length ===
+                        1
+                          ? 'activity location'
+                          : 'activity locations'}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
 
-                <Pressable
-                  style={
-                    styles.toolButton
-                  }
-                  onPress={() =>
-                    router.push(
-                      '/explore'
-                    )
-                  }
-                >
-                  <View
-                    style={[
-                      styles.toolIcon,
-                      styles.greenTool,
-                    ]}
-                  >
-                    <Ionicons
-                      name="compass-outline"
-                      size={24}
-                      color="#059669"
-                    />
-                  </View>
-
-                  <Text
-                    style={
-                      styles.toolText
-                    }
-                  >
-                    Explore
-                  </Text>
-                </Pressable>
-              </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={22}
+                  color="#9CA3AF"
+                />
+              </Pressable>
             </View>
 
-            {/* NOTES */}
+            {/* -----------------------------------------------
+                NOTES
+            ------------------------------------------------ */}
 
             <View
               style={
@@ -893,7 +928,9 @@ export default function TripDetailsScreen() {
           </>
         )}
 
-        {/* ITINERARY TAB */}
+        {/* ===================================================
+            ITINERARY TAB
+        ==================================================== */}
 
         {activeTab ===
           'itinerary' && (
@@ -1049,7 +1086,7 @@ export default function TripDetailsScreen() {
                         )}
                       </View>
 
-                      {/* ACTIVITY */}
+                      {/* ACTIVITY CARD */}
 
                       <View
                         style={
@@ -1085,7 +1122,7 @@ export default function TripDetailsScreen() {
 
                           <Pressable
                             style={
-                              styles.activityMoreButton
+                              styles.activityDeleteButton
                             }
                             onPress={() =>
                               handleDeleteActivity(
@@ -1189,11 +1226,15 @@ export default function TripDetailsScreen() {
         )}
 
         <View
-          style={styles.bottomSpace}
+          style={
+            styles.bottomSpace
+          }
         />
       </ScrollView>
 
-      {/* FLOATING ADD BUTTON */}
+      {/* =====================================================
+          FLOATING ADD ACTIVITY BUTTON
+      ====================================================== */}
 
       <Pressable
         style={
@@ -1213,10 +1254,15 @@ export default function TripDetailsScreen() {
   );
 }
 
+// ===========================================================
+// STYLES
+// ===========================================================
+
 const styles =
   StyleSheet.create({
     container: {
       flex: 1,
+
       backgroundColor:
         '#F7F8FA',
     },
@@ -1237,7 +1283,9 @@ const styles =
         '#FFFFFF',
     },
 
-    /* HERO */
+    // =======================================================
+    // HERO
+    // =======================================================
 
     hero: {
       height: 250,
@@ -1290,7 +1338,9 @@ const styles =
       },
     },
 
-    /* SUMMARY */
+    // =======================================================
+    // TRIP SUMMARY
+    // =======================================================
 
     tripSummaryCard: {
       marginHorizontal: 20,
@@ -1399,7 +1449,9 @@ const styles =
       alignItems: 'center',
     },
 
-    /* TABS */
+    // =======================================================
+    // TAB BAR
+    // =======================================================
 
     tabBar: {
       marginTop: 20,
@@ -1447,7 +1499,9 @@ const styles =
       color: '#1769E8',
     },
 
-    /* SECTIONS */
+    // =======================================================
+    // GENERAL SECTIONS
+    // =======================================================
 
     section: {
       backgroundColor:
@@ -1507,6 +1561,10 @@ const styles =
       fontWeight: '700',
     },
 
+    // =======================================================
+    // ITINERARY SUMMARY CARD
+    // =======================================================
+
     planningCard: {
       borderWidth: 1,
 
@@ -1520,6 +1578,9 @@ const styles =
       marginTop: 18,
 
       flexDirection: 'row',
+
+      backgroundColor:
+        '#FFFFFF',
     },
 
     planningIcon: {
@@ -1572,9 +1633,11 @@ const styles =
       marginTop: 9,
     },
 
-    /* TOOLS */
+    // =======================================================
+    // TRIP FEATURES
+    // =======================================================
 
-    toolsSection: {
+    featuresSection: {
       backgroundColor:
         '#FFFFFF',
 
@@ -1585,61 +1648,102 @@ const styles =
       marginTop: 10,
     },
 
-    toolsRow: {
-      flexDirection: 'row',
-
+    mapFeatureCard: {
       marginTop: 18,
 
-      gap: 12,
-    },
+      borderWidth: 1,
 
-    toolButton: {
-      flex: 1,
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 18,
+
+      padding: 16,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      flexDirection: 'row',
 
       alignItems: 'center',
+
+      shadowColor: '#000',
+
+      shadowOpacity: 0.03,
+
+      shadowRadius: 5,
+
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+
+      elevation: 1,
     },
 
-    toolIcon: {
-      width: 58,
+    mapFeatureIcon: {
+      width: 56,
 
-      height: 58,
+      height: 56,
 
       borderRadius: 17,
+
+      backgroundColor:
+        '#EEF4FF',
+
+      alignItems: 'center',
 
       justifyContent:
         'center',
 
-      alignItems: 'center',
-
-      marginBottom: 8,
+      marginRight: 14,
     },
 
-    blueTool: {
-      backgroundColor:
-        '#EEF4FF',
+    mapFeatureContent: {
+      flex: 1,
+
+      marginRight: 8,
     },
 
-    purpleTool: {
-      backgroundColor:
-        '#F5F3FF',
+    mapFeatureTitle: {
+      color: '#111827',
+
+      fontSize: 17,
+
+      fontWeight: '700',
     },
 
-    greenTool: {
-      backgroundColor:
-        '#ECFDF5',
-    },
-
-    toolText: {
-      color: '#374151',
+    mapFeatureDescription: {
+      color: '#6B7280',
 
       fontSize: 12,
 
-      fontWeight: '600',
+      lineHeight: 18,
 
-      textAlign: 'center',
+      marginTop: 4,
     },
 
-    /* NOTES */
+    mapFeatureStatus: {
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: 4,
+
+      marginTop: 8,
+    },
+
+    mapFeatureStatusText: {
+      color: '#1769E8',
+
+      fontSize: 11,
+
+      fontWeight: '600',
+    },
+
+    // =======================================================
+    // NOTES
+    // =======================================================
 
     notesSection: {
       backgroundColor:
@@ -1688,7 +1792,9 @@ const styles =
       marginTop: 16,
     },
 
-    /* ITINERARY */
+    // =======================================================
+    // ITINERARY TAB
+    // =======================================================
 
     itinerarySection: {
       backgroundColor:
@@ -1736,6 +1842,10 @@ const styles =
 
       fontWeight: '700',
     },
+
+    // =======================================================
+    // EMPTY ITINERARY
+    // =======================================================
 
     emptyItinerary: {
       alignItems: 'center',
@@ -1802,6 +1912,10 @@ const styles =
       fontWeight: '700',
     },
 
+    // =======================================================
+    // ITINERARY TIMELINE
+    // =======================================================
+
     activitiesContainer: {
       gap: 0,
     },
@@ -1840,6 +1954,10 @@ const styles =
         '#DBEAFE',
     },
 
+    // =======================================================
+    // ACTIVITY CARD
+    // =======================================================
+
     activityCard: {
       flex: 1,
 
@@ -1855,6 +1973,9 @@ const styles =
       marginLeft: 7,
 
       marginBottom: 15,
+
+      backgroundColor:
+        '#FFFFFF',
     },
 
     activityHeader: {
@@ -1882,7 +2003,7 @@ const styles =
       marginTop: 3,
     },
 
-    activityMoreButton: {
+    activityDeleteButton: {
       width: 33,
 
       height: 33,
@@ -1964,7 +2085,9 @@ const styles =
       fontWeight: '700',
     },
 
-    /* FLOATING BUTTON */
+    // =======================================================
+    // FLOATING ADD BUTTON
+    // =======================================================
 
     floatingButton: {
       position: 'absolute',
