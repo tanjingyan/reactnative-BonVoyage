@@ -1,16 +1,98 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-import { signOut } from 'firebase/auth';
+import {
+  useState,
+} from 'react';
 
-import { auth } from '@/firebase/firebaseConfig';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import {
+  signOut,
+} from 'firebase/auth';
+
+import {
+  auth,
+} from '@/firebase/firebaseConfig';
+
+// ==========================================================
+// TYPES
+// ==========================================================
+
+type ProfileTab =
+  | 'guides'
+  | 'posts'
+  | 'saved';
+
+// ==========================================================
+// SCREEN
+// ==========================================================
 
 export default function ProfileScreen() {
+  const [
+    activeTab,
+    setActiveTab,
+  ] =
+    useState<ProfileTab>(
+      'guides'
+    );
+
+  const [
+    settingsVisible,
+    setSettingsVisible,
+  ] =
+    useState(false);
+
+  const user =
+    auth.currentUser;
+
+  const displayName =
+    user?.displayName ||
+    'BonVoyage User';
+
+  const email =
+    user?.email ||
+    'No email available';
+
+  const username =
+    createUsername(
+      displayName
+    );
+
+  const initials =
+    getInitials(
+      displayName
+    );
+
+  // ========================================================
+  // LOGOUT
+  // ========================================================
+
   async function handleLogout() {
     try {
-      await signOut(auth);
+      setSettingsVisible(
+        false
+      );
+
+      await signOut(
+        auth
+      );
     } catch (error) {
-      console.log('Logout error:', error);
+      console.log(
+        'Logout error:',
+        error
+      );
 
       Alert.alert(
         'Logout Failed',
@@ -28,164 +110,1564 @@ export default function ProfileScreen() {
           text: 'Cancel',
           style: 'cancel',
         },
+
         {
           text: 'Log Out',
-          style: 'destructive',
-          onPress: handleLogout,
+          style:
+            'destructive',
+
+          onPress:
+            handleLogout,
         },
       ]
     );
   }
 
+  // ========================================================
+  // PLACEHOLDER ACTIONS
+  // ========================================================
+
+  function showComingSoon(
+    feature: string
+  ) {
+    Alert.alert(
+      feature,
+      'This feature will be connected next.'
+    );
+  }
+
+  // ========================================================
+  // UI
+  // ========================================================
+
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <Text style={styles.title}>Profile</Text>
-
-        <View style={styles.profileSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>BV</Text>
-          </View>
-
-          <View>
-            <Text style={styles.name}>
-              {auth.currentUser?.displayName || 'BonVoyage User'}
-            </Text>
-
-            <Text style={styles.email}>
-              {auth.currentUser?.email || 'No email available'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.menuContainer}>
-          <Pressable style={styles.menuItem}>
-            <Text style={styles.menuText}>Personal Information</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-
-          <Pressable style={styles.menuItem}>
-            <Text style={styles.menuText}>Saved Places</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-
-          <Pressable style={styles.menuItem}>
-            <Text style={styles.menuText}>Travel Preferences</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-
-          <Pressable style={styles.menuItem}>
-            <Text style={styles.menuText}>Notifications</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-
-          <Pressable style={styles.menuItem}>
-            <Text style={styles.menuText}>Help & Support</Text>
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-        </View>
-
-        <Pressable
-          style={styles.logoutButton}
-          onPress={confirmLogout}
+    <View
+      style={
+        styles.container
+      }
+    >
+      <SafeAreaView
+        style={
+          styles.safeArea
+        }
+        edges={['top']}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={
+            false
+          }
+          contentContainerStyle={
+            styles.scrollContent
+          }
         >
-          <Text style={styles.logoutText}>Log Out</Text>
-        </Pressable>
+          {/* ================================================= */}
+          {/* HEADER                                            */}
+          {/* ================================================= */}
+
+          <View
+            style={
+              styles.header
+            }
+          >
+            <View
+              style={
+                styles.headerSpacer
+              }
+            />
+
+            <Text
+              style={
+                styles.title
+              }
+            >
+              Profile
+            </Text>
+
+            <Pressable
+              style={
+                styles.settingsButton
+              }
+              onPress={() =>
+                setSettingsVisible(
+                  true
+                )
+              }
+            >
+              <Ionicons
+                name="settings-outline"
+                size={23}
+                color="#111827"
+              />
+            </Pressable>
+          </View>
+
+          {/* ================================================= */}
+          {/* PROFILE INFORMATION                               */}
+          {/* ================================================= */}
+
+          <View
+            style={
+              styles.profileSection
+            }
+          >
+            <View
+              style={
+                styles.avatar
+              }
+            >
+              <Text
+                style={
+                  styles.avatarText
+                }
+              >
+                {initials}
+              </Text>
+            </View>
+
+            <Text
+              style={
+                styles.name
+              }
+            >
+              {displayName}
+            </Text>
+
+            <Text
+              style={
+                styles.username
+              }
+            >
+              @{username}
+            </Text>
+
+            <Text
+              style={
+                styles.bio
+              }
+            >
+              Exploring the world
+              one trip at a time ✈️
+            </Text>
+
+            <View
+              style={
+                styles.locationRow
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={15}
+                color="#6B7280"
+              />
+
+              <Text
+                style={
+                  styles.locationText
+                }
+              >
+                Singapore
+              </Text>
+            </View>
+          </View>
+
+          {/* ================================================= */}
+          {/* SOCIAL STATS                                     */}
+          {/* ================================================= */}
+
+          <View
+            style={
+              styles.statsContainer
+            }
+          >
+            <StatItem
+              value="0"
+              label="Guides"
+            />
+
+            <View
+              style={
+                styles.statDivider
+              }
+            />
+
+            <StatItem
+              value="0"
+              label="Posts"
+            />
+
+            <View
+              style={
+                styles.statDivider
+              }
+            />
+
+            <StatItem
+              value="0"
+              label="Saved"
+            />
+          </View>
+
+          {/* ================================================= */}
+          {/* EDIT PROFILE                                     */}
+          {/* ================================================= */}
+
+          <Pressable
+            style={
+              styles.editProfileButton
+            }
+            onPress={() =>
+              showComingSoon(
+                'Edit Profile'
+              )
+            }
+          >
+            <Ionicons
+              name="create-outline"
+              size={18}
+              color="#111827"
+            />
+
+            <Text
+              style={
+                styles.editProfileText
+              }
+            >
+              Edit profile
+            </Text>
+          </Pressable>
+
+          {/* ================================================= */}
+          {/* PROFILE TABS                                     */}
+          {/* ================================================= */}
+
+          <View
+            style={
+              styles.tabsContainer
+            }
+          >
+            <ProfileTabButton
+              title="Guides"
+              icon="book-outline"
+              active={
+                activeTab ===
+                'guides'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'guides'
+                )
+              }
+            />
+
+            <ProfileTabButton
+              title="Posts"
+              icon="images-outline"
+              active={
+                activeTab ===
+                'posts'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'posts'
+                )
+              }
+            />
+
+            <ProfileTabButton
+              title="Saved"
+              icon="bookmark-outline"
+              active={
+                activeTab ===
+                'saved'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'saved'
+                )
+              }
+            />
+          </View>
+
+          {/* ================================================= */}
+          {/* GUIDES TAB                                       */}
+          {/* ================================================= */}
+
+          {activeTab ===
+            'guides' && (
+            <EmptyProfileSection
+              icon="book-outline"
+              title="No guides yet"
+              description="Turn your trips into travel guides and share them with other BonVoyage travellers."
+              buttonText="Create a guide"
+              onPress={() =>
+                showComingSoon(
+                  'Create Guide'
+                )
+              }
+            />
+          )}
+
+          {/* ================================================= */}
+          {/* POSTS TAB                                        */}
+          {/* ================================================= */}
+
+          {activeTab ===
+            'posts' && (
+            <EmptyProfileSection
+              icon="images-outline"
+              title="No posts yet"
+              description="Share travel photos, experiences and recommendations from your adventures."
+              buttonText="Create a post"
+              onPress={() =>
+                showComingSoon(
+                  'Create Post'
+                )
+              }
+            />
+          )}
+
+          {/* ================================================= */}
+          {/* SAVED TAB                                        */}
+          {/* ================================================= */}
+
+          {activeTab ===
+            'saved' && (
+            <EmptyProfileSection
+              icon="bookmark-outline"
+              title="Nothing saved yet"
+              description="Places and travel guides that you save will appear here."
+            />
+          )}
+
+          <View
+            style={
+              styles.bottomSpace
+            }
+          />
+        </ScrollView>
+
+        {/* =================================================== */}
+        {/* SETTINGS MODAL                                     */}
+        {/* =================================================== */}
+
+        <Modal
+          visible={
+            settingsVisible
+          }
+          transparent
+          animationType="slide"
+          onRequestClose={() =>
+            setSettingsVisible(
+              false
+            )
+          }
+        >
+          <View
+            style={
+              styles.modalOverlay
+            }
+          >
+            <Pressable
+              style={
+                styles.modalBackdrop
+              }
+              onPress={() =>
+                setSettingsVisible(
+                  false
+                )
+              }
+            />
+
+            <View
+              style={
+                styles.settingsSheet
+              }
+            >
+              {/* DRAG BAR */}
+
+              <View
+                style={
+                  styles.dragBar
+                }
+              />
+
+              {/* SETTINGS HEADER */}
+
+              <View
+                style={
+                  styles.settingsHeader
+                }
+              >
+                <Text
+                  style={
+                    styles.settingsTitle
+                  }
+                >
+                  Settings
+                </Text>
+
+                <Pressable
+                  style={
+                    styles.closeButton
+                  }
+                  onPress={() =>
+                    setSettingsVisible(
+                      false
+                    )
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={22}
+                    color="#111827"
+                  />
+                </Pressable>
+              </View>
+
+              {/* ACCOUNT */}
+
+              <View
+                style={
+                  styles.settingsProfile
+                }
+              >
+                <View
+                  style={
+                    styles.smallAvatar
+                  }
+                >
+                  <Text
+                    style={
+                      styles.smallAvatarText
+                    }
+                  >
+                    {initials}
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.settingsUserInfo
+                  }
+                >
+                  <Text
+                    style={
+                      styles.settingsName
+                    }
+                  >
+                    {displayName}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.settingsEmail
+                    }
+                  >
+                    {email}
+                  </Text>
+                </View>
+              </View>
+
+              {/* SETTINGS ITEMS */}
+
+              <View
+                style={
+                  styles.menuContainer
+                }
+              >
+                <SettingsItem
+                  icon="person-outline"
+                  title="Personal Information"
+                  onPress={() =>
+                    showComingSoon(
+                      'Personal Information'
+                    )
+                  }
+                />
+
+                <SettingsItem
+                  icon="heart-outline"
+                  title="Travel Preferences"
+                  onPress={() =>
+                    showComingSoon(
+                      'Travel Preferences'
+                    )
+                  }
+                />
+
+                <SettingsItem
+                  icon="notifications-outline"
+                  title="Notifications"
+                  onPress={() =>
+                    showComingSoon(
+                      'Notifications'
+                    )
+                  }
+                />
+
+                <SettingsItem
+                  icon="help-circle-outline"
+                  title="Help & Support"
+                  onPress={() =>
+                    showComingSoon(
+                      'Help & Support'
+                    )
+                  }
+                  last
+                />
+              </View>
+
+              {/* LOGOUT */}
+
+              <Pressable
+                style={
+                  styles.logoutButton
+                }
+                onPress={
+                  confirmLogout
+                }
+              >
+                <Ionicons
+                  name="log-out-outline"
+                  size={19}
+                  color="#DC2626"
+                />
+
+                <Text
+                  style={
+                    styles.logoutText
+                  }
+                >
+                  Log Out
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+// ==========================================================
+// STAT ITEM
+// ==========================================================
 
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
+type StatItemProps = {
+  value: string;
+  label: string;
+};
 
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 30,
-  },
+function StatItem({
+  value,
+  label,
+}: StatItemProps) {
+  return (
+    <View
+      style={
+        styles.statItem
+      }
+    >
+      <Text
+        style={
+          styles.statValue
+        }
+      >
+        {value}
+      </Text>
 
-  profileSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 30,
-  },
+      <Text
+        style={
+          styles.statLabel
+        }
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
 
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#DCEBFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+// ==========================================================
+// PROFILE TAB
+// ==========================================================
 
-  avatarText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1769E8',
-  },
+type ProfileTabButtonProps = {
+  title: string;
 
-  name: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
+  icon:
+    keyof typeof Ionicons.glyphMap;
 
-  email: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#6B7280',
-  },
+  active: boolean;
 
-  menuContainer: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
+  onPress: () => void;
+};
 
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
+function ProfileTabButton({
+  title,
+  icon,
+  active,
+  onPress,
+}: ProfileTabButtonProps) {
+  return (
+    <Pressable
+      style={
+        styles.tabButton
+      }
+      onPress={
+        onPress
+      }
+    >
+      <View
+        style={
+          styles.tabContent
+        }
+      >
+        <Ionicons
+          name={icon}
+          size={19}
+          color={
+            active
+              ? '#1769E8'
+              : '#6B7280'
+          }
+        />
 
-  menuText: {
-    fontSize: 16,
-  },
+        <Text
+          style={[
+            styles.tabText,
 
-  arrow: {
-    fontSize: 24,
-    color: '#9CA3AF',
-  },
+            active &&
+              styles.activeTabText,
+          ]}
+        >
+          {title}
+        </Text>
+      </View>
 
-  logoutButton: {
-    marginTop: 28,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
+      {active && (
+        <View
+          style={
+            styles.activeTabLine
+          }
+        />
+      )}
+    </Pressable>
+  );
+}
 
-  logoutText: {
-    color: '#DC2626',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+// ==========================================================
+// EMPTY PROFILE SECTION
+// ==========================================================
+
+type EmptyProfileSectionProps = {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  title: string;
+
+  description: string;
+
+  buttonText?: string;
+
+  onPress?: () => void;
+};
+
+function EmptyProfileSection({
+  icon,
+  title,
+  description,
+  buttonText,
+  onPress,
+}: EmptyProfileSectionProps) {
+  return (
+    <View
+      style={
+        styles.emptyContainer
+      }
+    >
+      <View
+        style={
+          styles.emptyIcon
+        }
+      >
+        <Ionicons
+          name={icon}
+          size={33}
+          color="#1769E8"
+        />
+      </View>
+
+      <Text
+        style={
+          styles.emptyTitle
+        }
+      >
+        {title}
+      </Text>
+
+      <Text
+        style={
+          styles.emptyDescription
+        }
+      >
+        {description}
+      </Text>
+
+      {buttonText &&
+      onPress ? (
+        <Pressable
+          style={
+            styles.createButton
+          }
+          onPress={
+            onPress
+          }
+        >
+          <Ionicons
+            name="add"
+            size={19}
+            color="#FFFFFF"
+          />
+
+          <Text
+            style={
+              styles.createButtonText
+            }
+          >
+            {buttonText}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+// ==========================================================
+// SETTINGS ITEM
+// ==========================================================
+
+type SettingsItemProps = {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  title: string;
+
+  onPress: () => void;
+
+  last?: boolean;
+};
+
+function SettingsItem({
+  icon,
+  title,
+  onPress,
+  last = false,
+}: SettingsItemProps) {
+  return (
+    <Pressable
+      style={[
+        styles.menuItem,
+
+        last &&
+          styles.menuItemLast,
+      ]}
+      onPress={
+        onPress
+      }
+    >
+      <View
+        style={
+          styles.menuLeft
+        }
+      >
+        <View
+          style={
+            styles.menuIcon
+          }
+        >
+          <Ionicons
+            name={icon}
+            size={19}
+            color="#4B5563"
+          />
+        </View>
+
+        <Text
+          style={
+            styles.menuText
+          }
+        >
+          {title}
+        </Text>
+      </View>
+
+      <Ionicons
+        name="chevron-forward"
+        size={19}
+        color="#9CA3AF"
+      />
+    </Pressable>
+  );
+}
+
+// ==========================================================
+// USERNAME
+// ==========================================================
+
+function createUsername(
+  displayName: string
+) {
+  return displayName
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9]/g,
+      ''
+    );
+}
+
+// ==========================================================
+// INITIALS
+// ==========================================================
+
+function getInitials(
+  displayName: string
+) {
+  const parts =
+    displayName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+  if (
+    parts.length ===
+    0
+  ) {
+    return 'BV';
+  }
+
+  if (
+    parts.length ===
+    1
+  ) {
+    return parts[0]
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  return (
+    parts[0][0] +
+    parts[
+      parts.length - 1
+    ][0]
+  ).toUpperCase();
+}
+
+// ==========================================================
+// STYLES
+// ==========================================================
+
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    safeArea: {
+      flex: 1,
+    },
+
+    scrollContent: {
+      paddingHorizontal:
+        22,
+
+      paddingBottom:
+        110,
+    },
+
+    // ------------------------------------------------------
+    // HEADER
+    // ------------------------------------------------------
+
+    header: {
+      minHeight: 64,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    headerSpacer: {
+      width: 44,
+    },
+
+    title: {
+      fontSize: 23,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    settingsButton: {
+      width: 44,
+
+      height: 44,
+
+      borderRadius: 22,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    // ------------------------------------------------------
+    // PROFILE
+    // ------------------------------------------------------
+
+    profileSection: {
+      alignItems:
+        'center',
+
+      paddingTop: 16,
+    },
+
+    avatar: {
+      width: 92,
+
+      height: 92,
+
+      borderRadius: 46,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#DCEBFF',
+
+      borderWidth: 4,
+
+      borderColor:
+        '#FFFFFF',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity:
+        0.09,
+
+      shadowRadius: 8,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 3,
+    },
+
+    avatarText: {
+      fontSize: 27,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    name: {
+      marginTop: 14,
+
+      fontSize: 22,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    username: {
+      marginTop: 3,
+
+      fontSize: 13,
+
+      color: '#6B7280',
+    },
+
+    bio: {
+      marginTop: 13,
+
+      maxWidth: 270,
+
+      textAlign:
+        'center',
+
+      fontSize: 14,
+
+      lineHeight: 20,
+
+      color: '#374151',
+    },
+
+    locationRow: {
+      marginTop: 8,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    locationText: {
+      marginLeft: 4,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    // ------------------------------------------------------
+    // STATS
+    // ------------------------------------------------------
+
+    statsContainer: {
+      marginTop: 25,
+
+      paddingVertical:
+        17,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderTopWidth: 1,
+
+      borderBottomWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+    },
+
+    statItem: {
+      flex: 1,
+
+      alignItems:
+        'center',
+    },
+
+    statValue: {
+      fontSize: 18,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    statLabel: {
+      marginTop: 3,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    statDivider: {
+      width: 1,
+
+      height: 30,
+
+      backgroundColor:
+        '#E5E7EB',
+    },
+
+    // ------------------------------------------------------
+    // EDIT PROFILE
+    // ------------------------------------------------------
+
+    editProfileButton: {
+      height: 47,
+
+      marginTop: 18,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    editProfileText: {
+      marginLeft: 7,
+
+      fontSize: 14,
+
+      fontWeight: '700',
+
+      color: '#111827',
+    },
+
+    // ------------------------------------------------------
+    // TABS
+    // ------------------------------------------------------
+
+    tabsContainer: {
+      marginTop: 27,
+
+      flexDirection:
+        'row',
+
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        '#E5E7EB',
+    },
+
+    tabButton: {
+      flex: 1,
+
+      position:
+        'relative',
+
+      alignItems:
+        'center',
+    },
+
+    tabContent: {
+      height: 48,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    tabText: {
+      marginLeft: 6,
+
+      fontSize: 13,
+
+      fontWeight: '600',
+
+      color: '#6B7280',
+    },
+
+    activeTabText: {
+      color: '#1769E8',
+    },
+
+    activeTabLine: {
+      position:
+        'absolute',
+
+      left: 8,
+
+      right: 8,
+
+      bottom: -1,
+
+      height: 2,
+
+      borderRadius: 2,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    // ------------------------------------------------------
+    // EMPTY CONTENT
+    // ------------------------------------------------------
+
+    emptyContainer: {
+      alignItems:
+        'center',
+
+      paddingTop: 55,
+
+      paddingHorizontal:
+        28,
+    },
+
+    emptyIcon: {
+      width: 70,
+
+      height: 70,
+
+      borderRadius: 22,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    emptyTitle: {
+      marginTop: 17,
+
+      fontSize: 18,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    emptyDescription: {
+      marginTop: 7,
+
+      maxWidth: 280,
+
+      textAlign:
+        'center',
+
+      fontSize: 13,
+
+      lineHeight: 19,
+
+      color: '#6B7280',
+    },
+
+    createButton: {
+      marginTop: 18,
+
+      paddingHorizontal:
+        18,
+
+      height: 44,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius: 13,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    createButtonText: {
+      marginLeft: 5,
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#FFFFFF',
+    },
+
+    bottomSpace: {
+      height: 30,
+    },
+
+    // ------------------------------------------------------
+    // SETTINGS MODAL
+    // ------------------------------------------------------
+
+    modalOverlay: {
+      flex: 1,
+
+      justifyContent:
+        'flex-end',
+    },
+
+    modalBackdrop: {
+      ...StyleSheet.absoluteFill,
+
+      backgroundColor:
+        'rgba(0,0,0,0.38)',
+    },
+
+    settingsSheet: {
+      paddingHorizontal:
+        22,
+
+      paddingTop: 10,
+
+      paddingBottom: 35,
+
+      borderTopLeftRadius:
+        28,
+
+      borderTopRightRadius:
+        28,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    dragBar: {
+      width: 42,
+
+      height: 4,
+
+      alignSelf:
+        'center',
+
+      borderRadius: 4,
+
+      backgroundColor:
+        '#D1D5DB',
+    },
+
+    settingsHeader: {
+      marginTop: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    settingsTitle: {
+      fontSize: 22,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    closeButton: {
+      width: 38,
+
+      height: 38,
+
+      borderRadius: 19,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    // ------------------------------------------------------
+    // SETTINGS PROFILE
+    // ------------------------------------------------------
+
+    settingsProfile: {
+      marginTop: 20,
+
+      padding: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderRadius: 17,
+
+      backgroundColor:
+        '#F8FAFC',
+    },
+
+    smallAvatar: {
+      width: 50,
+
+      height: 50,
+
+      borderRadius: 25,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#DCEBFF',
+    },
+
+    smallAvatarText: {
+      fontSize: 16,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    settingsUserInfo: {
+      flex: 1,
+
+      marginLeft: 12,
+    },
+
+    settingsName: {
+      fontSize: 15,
+
+      fontWeight: '700',
+
+      color: '#111827',
+    },
+
+    settingsEmail: {
+      marginTop: 3,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    // ------------------------------------------------------
+    // SETTINGS ITEMS
+    // ------------------------------------------------------
+
+    menuContainer: {
+      marginTop: 20,
+
+      overflow:
+        'hidden',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 17,
+    },
+
+    menuItem: {
+      minHeight: 58,
+
+      paddingHorizontal:
+        14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      borderBottomWidth:
+        1,
+
+      borderBottomColor:
+        '#E5E7EB',
+    },
+
+    menuItemLast: {
+      borderBottomWidth:
+        0,
+    },
+
+    menuLeft: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    menuIcon: {
+      width: 36,
+
+      height: 36,
+
+      borderRadius: 11,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    menuText: {
+      marginLeft: 11,
+
+      fontSize: 14,
+
+      fontWeight: '600',
+
+      color: '#111827',
+    },
+
+    // ------------------------------------------------------
+    // LOGOUT
+    // ------------------------------------------------------
+
+    logoutButton: {
+      height: 50,
+
+      marginTop: 20,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#FCA5A5',
+
+      borderRadius: 14,
+    },
+
+    logoutText: {
+      marginLeft: 7,
+
+      color: '#DC2626',
+
+      fontSize: 14,
+
+      fontWeight: '700',
+    },
+  });

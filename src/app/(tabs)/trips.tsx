@@ -108,14 +108,6 @@ export default function TripsScreen() {
               Create your first trip to get started.
             </ThemedText>
 
-            <Pressable
-              style={styles.createButton}
-              onPress={() => router.push('/create-trip')}
-            >
-              <ThemedText style={styles.createButtonText}>
-                + Create Trip
-              </ThemedText>
-            </Pressable>
           </View>
         ) : (
           <FlatList
@@ -214,19 +206,6 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 8,
     opacity: 0.6,
-  },
-
-  createButton: {
-    marginTop: 24,
-    backgroundColor: '#1769E8',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-
-  createButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
   },
 
   list: {

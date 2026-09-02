@@ -1177,6 +1177,31 @@ export default function HomeScreen() {
           }
         />
       </ScrollView>
+
+      {/* =====================================================
+          FLOATING CREATE TRIP BUTTON
+          Only appears on the Home / index tab because it is
+          rendered directly inside this screen.
+      ====================================================== */}
+
+      <Pressable
+        style={
+          styles.floatingCreateButton
+        }
+        onPress={() =>
+          router.push(
+            '/create-trip'
+          )
+        }
+        accessibilityRole="button"
+        accessibilityLabel="Create a new trip"
+      >
+        <Ionicons
+          name="add"
+          size={31}
+          color="#FFFFFF"
+        />
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -1863,5 +1888,47 @@ const styles =
 
     bottomSpacing: {
       height: 30,
+    },
+
+    // =======================================================
+    // FLOATING CREATE TRIP BUTTON
+    // =======================================================
+
+    floatingCreateButton: {
+      position: 'absolute',
+
+      right: 22,
+
+      /*
+       * Keeps the button above the bottom tab bar.
+       */
+      bottom: 20,
+
+      width: 58,
+
+      height: 58,
+
+      borderRadius: 29,
+
+      backgroundColor:
+        '#1769E8',
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+
+      elevation: 9,
+
+      shadowColor: '#000',
+
+      shadowOpacity: 0.22,
+
+      shadowRadius: 9,
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
     },
   });

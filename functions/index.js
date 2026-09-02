@@ -790,3 +790,254 @@ exports.searchNearbyPlace = onCall(
     }
   }
 );
+
+exports.searchPlaces = onCall(
+  {
+    region: 'asia-southeast1',
+
+    secrets: [
+      GOOGLE_PLACES_API_KEY,
+    ],
+  },
+
+  async request => {
+    // ======================================================
+    // AUTH CHECK
+    // ======================================================
+
+    if (!request.auth) {
+      throw new HttpsError(
+        'unauthenticated',
+        'You must be logged in to search places.'
+      );
+    }
+
+    // ======================================================
+    // GET SEARCH TEXT
+    // ======================================================
+
+    const query =
+      String(
+        request.data?.query || ''
+      ).trim();
+
+    if (!query) {
+      throw new HttpsError(
+        'invalid-argument',
+        'A search query is required.'
+      );
+    }
+
+    try {
+      const apiKey =
+        GOOGLE_PLACES_API_KEY.value();
+
+      // ====================================================
+      // GOOGLE PLACES TEXT SEARCH
+      // ====================================================
+
+      const response =
+        await fetch(
+          'https://places.googleapis.com/v1/places:searchText',
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+
+              'X-Goog-Api-Key':
+                apiKey,
+
+              /*
+                Only request fields BonVoyage needs.
+              */
+              'X-Goog-FieldMask': [
+                'places.id',
+                'places.displayName',
+                'places.formattedAddress',
+                'places.location',
+                'places.rating',
+                'places.userRatingCount',
+                'places.primaryType',
+                'places.googleMapsUri',
+                'places.photos',
+              ].join(','),
+            },
+
+            body:
+              JSON.stringify({
+                textQuery:
+                  query,
+
+                pageSize:
+                  10,
+              }),
+          }
+        );
+
+      // ====================================================
+      // GOOGLE ERROR
+      // ====================================================
+
+      if (!response.ok) {
+        const errorText =
+          await response.text();
+
+        console.error(
+          'Google Places Text Search error:',
+          response.status,
+          errorText
+        );
+
+        throw new HttpsError(
+          'internal',
+          'Google Places search failed.'
+        );
+      }
+
+      const data =
+        await response.json();
+
+      const rawPlaces =
+        data.places || [];
+
+      // ====================================================
+      // FORMAT RESULTS
+      // ====================================================
+
+      const places =
+        await Promise.all(
+          rawPlaces.map(
+            async place => {
+              let photoUri =
+                null;
+
+              let photoAttributions =
+                [];
+
+              // ============================================
+              // FIRST PHOTO
+              // ============================================
+
+              const firstPhoto =
+                place.photos?.[0];
+
+              if (
+                firstPhoto?.name
+              ) {
+                try {
+                  const photoResponse =
+                    await fetch(
+                      `https://places.googleapis.com/v1/${firstPhoto.name}/media?maxWidthPx=700&skipHttpRedirect=true`,
+                      {
+                        headers: {
+                          'X-Goog-Api-Key':
+                            apiKey,
+                        },
+                      }
+                    );
+
+                  if (
+                    photoResponse.ok
+                  ) {
+                    const photoData =
+                      await photoResponse.json();
+
+                    photoUri =
+                      photoData.photoUri ??
+                      null;
+                  }
+                } catch (
+                  photoError
+                ) {
+                  console.log(
+                    'Photo error:',
+                    photoError
+                  );
+                }
+
+                photoAttributions =
+                  firstPhoto.authorAttributions ||
+                  [];
+              }
+
+              // ============================================
+              // NORMALISED PLACE
+              // ============================================
+
+              return {
+                id:
+                  place.id ??
+                  null,
+
+                displayName:
+                  place.displayName
+                    ?.text ??
+                  'Unknown place',
+
+                formattedAddress:
+                  place.formattedAddress ??
+                  null,
+
+                latitude:
+                  place.location
+                    ?.latitude ??
+                  null,
+
+                longitude:
+                  place.location
+                    ?.longitude ??
+                  null,
+
+                rating:
+                  place.rating ??
+                  null,
+
+                userRatingCount:
+                  place.userRatingCount ??
+                  null,
+
+                primaryType:
+                  place.primaryType ??
+                  null,
+
+                googleMapsUri:
+                  place.googleMapsUri ??
+                  null,
+
+                photoUri,
+
+                photoAttributions,
+              };
+            }
+          )
+        );
+
+      // ====================================================
+      // SEND RESULTS BACK TO APP
+      // ====================================================
+
+      return {
+        places,
+      };
+    } catch (error) {
+      console.error(
+        'searchPlaces function error:',
+        error
+      );
+
+      if (
+        error instanceof
+        HttpsError
+      ) {
+        throw error;
+      }
+
+      throw new HttpsError(
+        'internal',
+        'Unable to search places.'
+      );
+    }
+  }
+);

@@ -22,17 +22,6 @@ export default function TabsLayout() {
       <View style={styles.container}>
         <AppTabs />
 
-        <Pressable
-          style={[
-            styles.floatingButton,
-            {
-              bottom: insets.bottom + 70,
-            },
-          ]}
-          onPress={() => router.push('/create-trip')}
-        >
-          <Text style={styles.plus}>+</Text>
-        </Pressable>
       </View>
     </ThemeProvider>
   );
@@ -41,32 +30,6 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-
-  floatingButton: {
-    position: 'absolute',
-    right: 22,
-
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-
-    backgroundColor: '#1769E8',
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    elevation: 8,
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-
-    zIndex: 100,
   },
 
   plus: {

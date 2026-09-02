@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+
 import {
   ActivityIndicator,
   Alert,
   ImageBackground,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -24,6 +30,7 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  updateDoc,
 } from 'firebase/firestore';
 
 import { db } from '@/firebase/firebaseConfig';
@@ -79,6 +86,59 @@ export default function TripDetailsScreen() {
   ] = useState<TabName>(
     'overview'
   );
+
+  // =========================================================
+  // INLINE TRIP EDITING
+  // =========================================================
+
+  const [
+    isEditingTrip,
+    setIsEditingTrip,
+  ] = useState(false);
+
+  const [
+    savingTrip,
+    setSavingTrip,
+  ] = useState(false);
+
+  const [
+    editTitle,
+    setEditTitle,
+  ] = useState('');
+
+  const [
+    editDestination,
+    setEditDestination,
+  ] = useState('');
+
+  const [
+    editStartDate,
+    setEditStartDate,
+  ] = useState<Date>(
+    new Date()
+  );
+
+  const [
+    editEndDate,
+    setEditEndDate,
+  ] = useState<Date>(
+    new Date()
+  );
+
+  const [
+    editNotes,
+    setEditNotes,
+  ] = useState('');
+
+  const [
+    showStartDatePicker,
+    setShowStartDatePicker,
+  ] = useState(false);
+
+  const [
+    showEndDatePicker,
+    setShowEndDatePicker,
+  ] = useState(false);
 
   // =========================================================
   // LOAD TRIP
@@ -304,6 +364,278 @@ export default function TripDetailsScreen() {
   }
 
   // =========================================================
+  // INLINE TRIP EDITING HELPERS
+  // =========================================================
+
+  function beginTripEdit() {
+    if (!trip) {
+      return;
+    }
+
+    setEditTitle(
+      trip.title
+    );
+
+    setEditDestination(
+      trip.destination
+    );
+
+    setEditStartDate(
+      new Date(
+        trip.startDate
+      )
+    );
+
+    setEditEndDate(
+      new Date(
+        trip.endDate
+      )
+    );
+
+    setEditNotes(
+      trip.notes || ''
+    );
+
+    setShowStartDatePicker(
+      false
+    );
+
+    setShowEndDatePicker(
+      false
+    );
+
+    setIsEditingTrip(
+      true
+    );
+  }
+
+  function cancelTripEdit() {
+    setShowStartDatePicker(
+      false
+    );
+
+    setShowEndDatePicker(
+      false
+    );
+
+    setIsEditingTrip(
+      false
+    );
+  }
+
+  function handleStartDateChange(
+    event: DateTimePickerEvent,
+    selectedDate?: Date
+  ) {
+    if (
+      Platform.OS ===
+      'android'
+    ) {
+      setShowStartDatePicker(
+        false
+      );
+    }
+
+    if (
+      event.type ===
+      'dismissed'
+    ) {
+      return;
+    }
+
+    if (!selectedDate) {
+      return;
+    }
+
+    setEditStartDate(
+      selectedDate
+    );
+
+    if (
+      selectedDate >
+      editEndDate
+    ) {
+      setEditEndDate(
+        selectedDate
+      );
+    }
+  }
+
+  function handleEndDateChange(
+    event: DateTimePickerEvent,
+    selectedDate?: Date
+  ) {
+    if (
+      Platform.OS ===
+      'android'
+    ) {
+      setShowEndDatePicker(
+        false
+      );
+    }
+
+    if (
+      event.type ===
+      'dismissed'
+    ) {
+      return;
+    }
+
+    if (!selectedDate) {
+      return;
+    }
+
+    if (
+      selectedDate <
+      editStartDate
+    ) {
+      Alert.alert(
+        'Invalid date',
+        'The end date cannot be before the start date.'
+      );
+
+      return;
+    }
+
+    setEditEndDate(
+      selectedDate
+    );
+  }
+
+  async function saveTripChanges() {
+    if (
+      !trip ||
+      !id
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      editTitle.trim();
+
+    const cleanDestination =
+      editDestination.trim();
+
+    if (!cleanTitle) {
+      Alert.alert(
+        'Trip name required',
+        'Please enter a trip name.'
+      );
+
+      return;
+    }
+
+    if (!cleanDestination) {
+      Alert.alert(
+        'Destination required',
+        'Please enter a destination.'
+      );
+
+      return;
+    }
+
+    if (
+      editEndDate <
+      editStartDate
+    ) {
+      Alert.alert(
+        'Invalid dates',
+        'The end date cannot be before the start date.'
+      );
+
+      return;
+    }
+
+    try {
+      setSavingTrip(
+        true
+      );
+
+      const updatedStartDate =
+        editStartDate.toISOString();
+
+      const updatedEndDate =
+        editEndDate.toISOString();
+
+      const updatedNotes =
+        editNotes.trim();
+
+      await updateDoc(
+        doc(
+          db,
+          'trips',
+          id
+        ),
+        {
+          title:
+            cleanTitle,
+
+          destination:
+            cleanDestination,
+
+          startDate:
+            updatedStartDate,
+
+          endDate:
+            updatedEndDate,
+
+          notes:
+            updatedNotes,
+        }
+      );
+
+      /*
+        Update the current screen immediately so there is
+        no need to leave Trip Details or reload the route.
+      */
+      setTrip({
+        ...trip,
+
+        title:
+          cleanTitle,
+
+        destination:
+          cleanDestination,
+
+        startDate:
+          updatedStartDate,
+
+        endDate:
+          updatedEndDate,
+
+        notes:
+          updatedNotes,
+      });
+
+      setShowStartDatePicker(
+        false
+      );
+
+      setShowEndDatePicker(
+        false
+      );
+
+      setIsEditingTrip(
+        false
+      );
+    } catch (error) {
+      console.log(
+        'Update trip error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to save changes',
+        'BonVoyage could not update this trip. Please try again.'
+      );
+    } finally {
+      setSavingTrip(
+        false
+      );
+    }
+  }
+
+  // =========================================================
   // DELETE ACTIVITY
   // =========================================================
 
@@ -473,13 +805,39 @@ export default function TripDetailsScreen() {
             styles.tripSummaryCard
           }
         >
-          <Text
-            style={
-              styles.tripTitle
-            }
-          >
-            {trip.title}
-          </Text>
+          {/* -------------------------------------------------
+              TRIP NAME
+          -------------------------------------------------- */}
+
+          {isEditingTrip ? (
+            <TextInput
+              style={
+                styles.tripTitleInput
+              }
+              value={
+                editTitle
+              }
+              onChangeText={
+                setEditTitle
+              }
+              placeholder="Trip name"
+              placeholderTextColor="#9CA3AF"
+              autoCapitalize="sentences"
+              returnKeyType="next"
+            />
+          ) : (
+            <Text
+              style={
+                styles.tripTitle
+              }
+            >
+              {trip.title}
+            </Text>
+          )}
+
+          {/* -------------------------------------------------
+              DESTINATION
+          -------------------------------------------------- */}
 
           <View
             style={
@@ -492,13 +850,30 @@ export default function TripDetailsScreen() {
               color="#6B7280"
             />
 
-            <Text
-              style={
-                styles.destination
-              }
-            >
-              {trip.destination}
-            </Text>
+            {isEditingTrip ? (
+              <TextInput
+                style={
+                  styles.destinationInput
+                }
+                value={
+                  editDestination
+                }
+                onChangeText={
+                  setEditDestination
+                }
+                placeholder="Destination"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="words"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.destination
+                }
+              >
+                {trip.destination}
+              </Text>
+            )}
           </View>
 
           <View
@@ -507,61 +882,283 @@ export default function TripDetailsScreen() {
             }
           />
 
-          <View
-            style={
-              styles.tripSummaryBottom
-            }
-          >
+          {/* -------------------------------------------------
+              TRIP DATES
+          -------------------------------------------------- */}
+
+          {isEditingTrip ? (
+            <>
+              <View
+                style={
+                  styles.editDatesContainer
+                }
+              >
+                <Pressable
+                  style={
+                    styles.editDateButton
+                  }
+                  onPress={() => {
+                    setShowEndDatePicker(
+                      false
+                    );
+
+                    setShowStartDatePicker(
+                      true
+                    );
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.editDateLabel
+                    }
+                  >
+                    Start date
+                  </Text>
+
+                  <View
+                    style={
+                      styles.editDateValueRow
+                    }
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color="#1769E8"
+                    />
+
+                    <Text
+                      style={
+                        styles.editDateValue
+                      }
+                    >
+                      {formatDate(
+                        editStartDate.toISOString()
+                      )}
+                    </Text>
+                  </View>
+                </Pressable>
+
+                <Ionicons
+                  name="arrow-forward"
+                  size={18}
+                  color="#9CA3AF"
+                />
+
+                <Pressable
+                  style={
+                    styles.editDateButton
+                  }
+                  onPress={() => {
+                    setShowStartDatePicker(
+                      false
+                    );
+
+                    setShowEndDatePicker(
+                      true
+                    );
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.editDateLabel
+                    }
+                  >
+                    End date
+                  </Text>
+
+                  <View
+                    style={
+                      styles.editDateValueRow
+                    }
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color="#1769E8"
+                    />
+
+                    <Text
+                      style={
+                        styles.editDateValue
+                      }
+                    >
+                      {formatDate(
+                        editEndDate.toISOString()
+                      )}
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+
+              {showStartDatePicker && (
+                <DateTimePicker
+                  value={
+                    editStartDate
+                  }
+                  mode="date"
+                  display={
+                    Platform.OS ===
+                    'ios'
+                      ? 'spinner'
+                      : 'default'
+                  }
+                  onChange={
+                    handleStartDateChange
+                  }
+                />
+              )}
+
+              {showEndDatePicker && (
+                <DateTimePicker
+                  value={
+                    editEndDate
+                  }
+                  minimumDate={
+                    editStartDate
+                  }
+                  mode="date"
+                  display={
+                    Platform.OS ===
+                    'ios'
+                      ? 'spinner'
+                      : 'default'
+                  }
+                  onChange={
+                    handleEndDateChange
+                  }
+                />
+              )}
+
+              {/* -------------------------------------------
+                  SAVE / CANCEL
+              -------------------------------------------- */}
+
+              <View
+                style={
+                  styles.editTripActions
+                }
+              >
+                <Pressable
+                  style={
+                    styles.cancelTripButton
+                  }
+                  onPress={
+                    cancelTripEdit
+                  }
+                  disabled={
+                    savingTrip
+                  }
+                >
+                  <Text
+                    style={
+                      styles.cancelTripButtonText
+                    }
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.saveTripButton,
+
+                    savingTrip &&
+                      styles.saveTripButtonDisabled,
+                  ]}
+                  onPress={
+                    saveTripChanges
+                  }
+                  disabled={
+                    savingTrip
+                  }
+                >
+                  {savingTrip ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="checkmark"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+
+                      <Text
+                        style={
+                          styles.saveTripButtonText
+                        }
+                      >
+                        Save changes
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          ) : (
             <View
               style={
-                styles.dateRow
+                styles.tripSummaryBottom
               }
             >
-              <Ionicons
-                name="calendar-outline"
-                size={21}
-                color="#6B7280"
-              />
+              <View
+                style={
+                  styles.dateRow
+                }
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={21}
+                  color="#6B7280"
+                />
 
-              <View>
-                <Text
-                  style={
-                    styles.dateLabel
-                  }
-                >
-                  Trip dates
-                </Text>
+                <View>
+                  <Text
+                    style={
+                      styles.dateLabel
+                    }
+                  >
+                    Trip dates
+                  </Text>
 
-                <Text
-                  style={
-                    styles.dateText
-                  }
-                >
-                  {formatDate(
-                    trip.startDate
-                  )}
+                  <Text
+                    style={
+                      styles.dateText
+                    }
+                  >
+                    {formatDate(
+                      trip.startDate
+                    )}
 
-                  {'  →  '}
+                    {'  →  '}
 
-                  {formatDate(
-                    trip.endDate
-                  )}
-                </Text>
+                    {formatDate(
+                      trip.endDate
+                    )}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <Pressable
-              style={
-                styles.moreButton
-              }
-            >
-              <Ionicons
-                name="ellipsis-horizontal"
-                size={22}
-                color="#6B7280"
-              />
-            </Pressable>
-          </View>
+              <Pressable
+                style={
+                  styles.moreButton
+                }
+                onPress={
+                  beginTripEdit
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Edit trip details"
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={22}
+                  color="#6B7280"
+                />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {/* ===================================================
@@ -906,7 +1503,23 @@ export default function TripDetailsScreen() {
                 </Text>
               </View>
 
-              {trip.notes ? (
+              {isEditingTrip ? (
+                <TextInput
+                  style={
+                    styles.notesInput
+                  }
+                  value={
+                    editNotes
+                  }
+                  onChangeText={
+                    setEditNotes
+                  }
+                  placeholder="Add notes about your trip..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  textAlignVertical="top"
+                />
+              ) : trip.notes ? (
                 <Text
                   style={
                     styles.notesText
@@ -1378,6 +1991,28 @@ const styles =
       letterSpacing: -0.7,
     },
 
+    tripTitleInput: {
+      minHeight: 48,
+
+      paddingHorizontal: 13,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#BFDBFE',
+
+      borderRadius: 12,
+
+      backgroundColor:
+        '#F8FAFF',
+
+      color: '#111827',
+
+      fontSize: 23,
+
+      fontWeight: '800',
+    },
+
     locationRow: {
       flexDirection: 'row',
 
@@ -1390,6 +2025,30 @@ const styles =
 
     destination: {
       color: '#6B7280',
+
+      fontSize: 15,
+    },
+
+    destinationInput: {
+      flex: 1,
+
+      minHeight: 42,
+
+      paddingHorizontal: 11,
+
+      paddingVertical: 8,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#BFDBFE',
+
+      borderRadius: 10,
+
+      backgroundColor:
+        '#F8FAFF',
+
+      color: '#111827',
 
       fontSize: 15,
     },
@@ -1447,6 +2106,134 @@ const styles =
         'center',
 
       alignItems: 'center',
+    },
+
+    editDatesContainer: {
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: 8,
+    },
+
+    editDateButton: {
+      flex: 1,
+
+      minHeight: 66,
+
+      paddingHorizontal: 12,
+
+      paddingVertical: 10,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 12,
+
+      backgroundColor:
+        '#F9FAFB',
+    },
+
+    editDateLabel: {
+      color: '#6B7280',
+
+      fontSize: 11,
+
+      fontWeight: '600',
+
+      marginBottom: 6,
+    },
+
+    editDateValueRow: {
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: 6,
+    },
+
+    editDateValue: {
+      flexShrink: 1,
+
+      color: '#111827',
+
+      fontSize: 12,
+
+      fontWeight: '700',
+    },
+
+    editTripActions: {
+      flexDirection: 'row',
+
+      justifyContent:
+        'flex-end',
+
+      gap: 10,
+
+      marginTop: 16,
+    },
+
+    cancelTripButton: {
+      minHeight: 43,
+
+      paddingHorizontal: 18,
+
+      borderRadius: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D1D5DB',
+
+      justifyContent:
+        'center',
+
+      alignItems: 'center',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    cancelTripButtonText: {
+      color: '#4B5563',
+
+      fontSize: 13,
+
+      fontWeight: '700',
+    },
+
+    saveTripButton: {
+      minHeight: 43,
+
+      paddingHorizontal: 18,
+
+      borderRadius: 12,
+
+      flexDirection: 'row',
+
+      gap: 5,
+
+      justifyContent:
+        'center',
+
+      alignItems: 'center',
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    saveTripButtonDisabled: {
+      opacity: 0.6,
+    },
+
+    saveTripButtonText: {
+      color: '#FFFFFF',
+
+      fontSize: 13,
+
+      fontWeight: '700',
     },
 
     // =======================================================
@@ -1780,6 +2567,32 @@ const styles =
       lineHeight: 23,
 
       marginTop: 16,
+    },
+
+    notesInput: {
+      minHeight: 110,
+
+      marginTop: 16,
+
+      paddingHorizontal: 13,
+
+      paddingVertical: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#BFDBFE',
+
+      borderRadius: 12,
+
+      backgroundColor:
+        '#F8FAFF',
+
+      color: '#111827',
+
+      fontSize: 15,
+
+      lineHeight: 22,
     },
 
     emptyNotes: {
