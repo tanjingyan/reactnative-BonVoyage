@@ -12,12 +12,14 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ImageBackground,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -25,16 +27,33 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
+import * as ImagePicker from 'expo-image-picker';
+
+import {
+  getApp,
+} from 'firebase/app';
+
 import {
   signOut,
+  updateProfile,
 } from 'firebase/auth';
 
 import {
   collection,
+  doc,
   onSnapshot,
   query,
+  serverTimestamp,
+  setDoc,
   where,
 } from 'firebase/firestore';
+
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytes,
+} from 'firebase/storage';
 
 import {
   auth,
@@ -49,6 +68,25 @@ type ProfileTab =
   | 'guides'
   | 'posts'
   | 'saved';
+
+type SettingsPage =
+  | 'main'
+  | 'personal';
+
+type UserProfile = {
+  displayName: string;
+  username: string;
+  email: string;
+  bio: string;
+  location: string;
+  photoURL: string | null;
+};
+
+const DEFAULT_BIO =
+  'Exploring the world one trip at a time ✈️';
+
+const DEFAULT_LOCATION =
+  'Singapore';
 
 type Guide = {
   id: string;
@@ -86,6 +124,58 @@ export default function ProfileScreen() {
     useState(false);
 
   const [
+    settingsPage,
+    setSettingsPage,
+  ] =
+    useState<SettingsPage>(
+      'main'
+    );
+
+  const [
+    editName,
+    setEditName,
+  ] =
+    useState('');
+
+  const [
+    editBio,
+    setEditBio,
+  ] =
+    useState('');
+
+  const [
+    editLocation,
+    setEditLocation,
+  ] =
+    useState('');
+
+  const [
+    savingProfile,
+    setSavingProfile,
+  ] =
+    useState(false);
+
+  const [
+    profile,
+    setProfile,
+  ] =
+    useState<UserProfile | null>(
+      null
+    );
+
+  const [
+    profileLoading,
+    setProfileLoading,
+  ] =
+    useState(true);
+
+  const [
+    uploadingPhoto,
+    setUploadingPhoto,
+  ] =
+    useState(false);
+
+  const [
     guides,
     setGuides,
   ] =
@@ -100,23 +190,214 @@ export default function ProfileScreen() {
   const user =
     auth.currentUser;
 
+  /*
+   * Use the exact BonVoyage Storage bucket explicitly.
+   * This avoids storage/no-default-bucket if storageBucket
+   * is missing from firebaseConfig.ts.
+   */
+  const storage =
+    getStorage(
+      getApp(),
+      'gs://bonvoyage-d9131.firebasestorage.app'
+    );
+
+  /*
+   * Firestore is the primary source for the social profile
+   * because Firebase Authentication does not have a username.
+   * Firebase Auth remains a fallback for older accounts.
+   */
   const displayName =
+    profile?.displayName ||
     user?.displayName ||
     'BonVoyage User';
 
   const email =
+    profile?.email ||
     user?.email ||
     'No email available';
 
   const username =
+    profile?.username ||
     createUsername(
       displayName
     );
+
+  const bio =
+    profile?.bio ??
+    DEFAULT_BIO;
+
+  const location =
+    profile?.location ??
+    DEFAULT_LOCATION;
+
+  const photoURL =
+    profile?.photoURL ||
+    user?.photoURL ||
+    null;
 
   const initials =
     getInitials(
       displayName
     );
+
+  // ========================================================
+  // LOAD USER PROFILE
+  // ========================================================
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(
+        null
+      );
+
+      setProfileLoading(
+        false
+      );
+
+      return;
+    }
+
+    setProfileLoading(
+      true
+    );
+
+    const userRef =
+      doc(
+        db,
+        'users',
+        user.uid
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        userRef,
+
+        snapshot => {
+          if (
+            snapshot.exists()
+          ) {
+            const data =
+              snapshot.data();
+
+            const loadedDisplayName =
+              String(
+                data.displayName ??
+                user.displayName ??
+                'BonVoyage User'
+              );
+
+            setProfile({
+              displayName:
+                loadedDisplayName,
+
+              username:
+                String(
+                  data.username ??
+                  createUsername(
+                    loadedDisplayName
+                  )
+                ),
+
+              email:
+                String(
+                  data.email ??
+                  user.email ??
+                  'No email available'
+                ),
+
+              bio:
+                String(
+                  data.bio ??
+                  DEFAULT_BIO
+                ),
+
+              location:
+                String(
+                  data.location ??
+                  DEFAULT_LOCATION
+                ),
+
+              photoURL:
+                data.photoURL
+                  ? String(
+                      data.photoURL
+                    )
+                  : user.photoURL ??
+                    null,
+            });
+          } else {
+            setProfile({
+              displayName:
+                user.displayName ||
+                'BonVoyage User',
+
+              username:
+                createUsername(
+                  user.displayName ||
+                  'BonVoyage User'
+                ),
+
+              email:
+                user.email ||
+                'No email available',
+
+              bio:
+                DEFAULT_BIO,
+
+              location:
+                DEFAULT_LOCATION,
+
+              photoURL:
+                user.photoURL ||
+                null,
+            });
+          }
+
+          setProfileLoading(
+            false
+          );
+        },
+
+        error => {
+          console.log(
+            'Load profile error:',
+            error
+          );
+
+          setProfile({
+            displayName:
+              user.displayName ||
+              'BonVoyage User',
+
+            username:
+              createUsername(
+                user.displayName ||
+                'BonVoyage User'
+              ),
+
+            email:
+              user.email ||
+              'No email available',
+
+            bio:
+              DEFAULT_BIO,
+
+            location:
+              DEFAULT_LOCATION,
+
+            photoURL:
+              user.photoURL ||
+              null,
+          });
+
+          setProfileLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [user?.uid]);
 
   // ========================================================
   // LOAD USER GUIDES
@@ -243,6 +524,416 @@ export default function ProfileScreen() {
   }, [user?.uid]);
 
   // ========================================================
+  // PROFILE PICTURE
+  // ========================================================
+
+  async function chooseProfilePicture() {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in again before changing your profile picture.'
+      );
+
+      return;
+    }
+
+    if (
+      uploadingPhoto
+    ) {
+      return;
+    }
+
+    try {
+      const permission =
+        await ImagePicker
+          .requestMediaLibraryPermissionsAsync();
+
+      if (
+        !permission.granted
+      ) {
+        Alert.alert(
+          'Photo Permission Required',
+          'BonVoyage needs access to your photo library so you can choose a profile picture.'
+        );
+
+        return;
+      }
+
+      const result =
+        await ImagePicker
+          .launchImageLibraryAsync({
+            mediaTypes: [
+              'images',
+            ],
+
+            allowsEditing:
+              true,
+
+            aspect: [
+              1,
+              1,
+            ],
+
+            quality:
+              0.75,
+          });
+
+      if (
+        result.canceled ||
+        !result.assets?.[0]
+      ) {
+        return;
+      }
+
+      const selectedImage =
+        result.assets[0];
+
+      setUploadingPhoto(
+        true
+      );
+
+      /*
+       * IMPORTANT:
+       *
+       * Do not use uploadString(base64) here.
+       *
+       * Firebase Storage converts base64 into an ArrayBuffer
+       * internally, and React Native/Hermes can throw:
+       *
+       * "Creating blobs from 'ArrayBuffer' and
+       *  'ArrayBufferView' are not supported"
+       *
+       * Instead, read the local image URI as an existing Blob
+       * and give that Blob directly to Firebase Storage.
+       */
+      const imageBlob =
+        await getBlobFromUri(
+          selectedImage.uri
+        );
+
+      const imageRef =
+        ref(
+          storage,
+          `profilePictures/${user.uid}/avatar`
+        );
+
+      await uploadBytes(
+        imageRef,
+        imageBlob,
+        {
+          contentType:
+            selectedImage.mimeType ||
+            'image/jpeg',
+        }
+      );
+
+      const downloadURL =
+        await getDownloadURL(
+          imageRef
+        );
+
+      /*
+       * Keep Firebase Authentication and Firestore in sync.
+       */
+      await updateProfile(
+        user,
+        {
+          photoURL:
+            downloadURL,
+        }
+      );
+
+      await setDoc(
+        doc(
+          db,
+          'users',
+          user.uid
+        ),
+        {
+          photoURL:
+            downloadURL,
+
+          updatedAt:
+            serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      Alert.alert(
+        'Profile Picture Updated',
+        'Your new profile picture has been saved.'
+      );
+    } catch (error: any) {
+      console.log(
+        'Profile picture upload error:',
+        error
+      );
+
+      console.log(
+        'Storage error code:',
+        error?.code
+      );
+
+      console.log(
+        'Storage error message:',
+        error?.message
+      );
+
+      /*
+       * Show the Firebase error code during development so
+       * Storage setup problems are easy to diagnose.
+       */
+      const errorCode =
+        error?.code
+          ? String(
+              error.code
+            )
+          : 'unknown';
+
+      const errorMessage =
+        error?.message
+          ? String(
+              error.message
+            )
+          : 'Unable to upload the selected image.';
+
+      Alert.alert(
+        'Upload Failed',
+        `${errorCode}\n\n${errorMessage}`
+      );
+    } finally {
+      setUploadingPhoto(
+        false
+      );
+    }
+  }
+
+  // ========================================================
+  // LOCAL IMAGE URI -> BLOB
+  // ========================================================
+
+  function getBlobFromUri(
+    uri: string
+  ): Promise<Blob> {
+    return new Promise(
+      (
+        resolve,
+        reject
+      ) => {
+        const xhr =
+          new XMLHttpRequest();
+
+        xhr.onload = () => {
+          resolve(
+            xhr.response
+          );
+        };
+
+        xhr.onerror = () => {
+          reject(
+            new Error(
+              'Unable to read the selected image.'
+            )
+          );
+        };
+
+        xhr.responseType =
+          'blob';
+
+        xhr.open(
+          'GET',
+          uri,
+          true
+        );
+
+        xhr.send(
+          null
+        );
+      }
+    );
+  }
+
+  // ========================================================
+  // SETTINGS
+  // ========================================================
+
+  function openSettings() {
+    setSettingsPage(
+      'main'
+    );
+
+    setSettingsVisible(
+      true
+    );
+  }
+
+  function closeSettings() {
+    if (
+      savingProfile
+    ) {
+      return;
+    }
+
+    setSettingsVisible(
+      false
+    );
+
+    setSettingsPage(
+      'main'
+    );
+  }
+
+  function openPersonalInformation() {
+    setEditName(
+      displayName
+    );
+
+    setEditBio(
+      bio
+    );
+
+    setEditLocation(
+      location
+    );
+
+    setSettingsPage(
+      'personal'
+    );
+
+    setSettingsVisible(
+      true
+    );
+  }
+
+  async function savePersonalInformation() {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in again before updating your profile.'
+      );
+
+      return;
+    }
+
+    const cleanedName =
+      editName.trim();
+
+    const cleanedBio =
+      editBio.trim();
+
+    const cleanedLocation =
+      editLocation.trim();
+
+    if (!cleanedName) {
+      Alert.alert(
+        'Name Required',
+        'Please enter your name.'
+      );
+
+      return;
+    }
+
+    if (
+      cleanedName.length >
+      50
+    ) {
+      Alert.alert(
+        'Name Too Long',
+        'Please keep your name under 50 characters.'
+      );
+
+      return;
+    }
+
+    if (
+      cleanedBio.length >
+      120
+    ) {
+      Alert.alert(
+        'Bio Too Long',
+        'Please keep your bio under 120 characters.'
+      );
+
+      return;
+    }
+
+    if (
+      cleanedLocation.length >
+      50
+    ) {
+      Alert.alert(
+        'Location Too Long',
+        'Please keep your location under 50 characters.'
+      );
+
+      return;
+    }
+
+    try {
+      setSavingProfile(
+        true
+      );
+
+      await updateProfile(
+        user,
+        {
+          displayName:
+            cleanedName,
+        }
+      );
+
+      await setDoc(
+        doc(
+          db,
+          'users',
+          user.uid
+        ),
+        {
+          displayName:
+            cleanedName,
+
+          bio:
+            cleanedBio,
+
+          location:
+            cleanedLocation,
+
+          updatedAt:
+            serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      setSettingsPage(
+        'main'
+      );
+
+      Alert.alert(
+        'Profile Updated',
+        'Your profile information has been saved.'
+      );
+    } catch (error) {
+      console.log(
+        'Save profile error:',
+        error
+      );
+
+      Alert.alert(
+        'Update Failed',
+        'Unable to update your profile. Please try again.'
+      );
+    } finally {
+      setSavingProfile(
+        false
+      );
+    }
+  }
+
+  // ========================================================
   // LOGOUT
   // ========================================================
 
@@ -354,10 +1045,8 @@ export default function ProfileScreen() {
               style={
                 styles.settingsButton
               }
-              onPress={() =>
-                setSettingsVisible(
-                  true
-                )
+              onPress={
+                openSettings
               }
             >
               <Ionicons
@@ -377,26 +1066,80 @@ export default function ProfileScreen() {
               styles.profileSection
             }
           >
-            <View
+            <Pressable
               style={
-                styles.avatar
+                styles.avatarButton
               }
+              disabled={
+                uploadingPhoto
+              }
+              onPress={() =>
+                void chooseProfilePicture()
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
             >
-              <Text
+              <View
                 style={
-                  styles.avatarText
+                  styles.avatar
                 }
               >
-                {initials}
-              </Text>
-            </View>
+                {photoURL ? (
+                  <Image
+                    source={{
+                      uri:
+                        photoURL,
+                    }}
+                    style={
+                      styles.avatarImage
+                    }
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.avatarText
+                    }
+                  >
+                    {initials}
+                  </Text>
+                )}
+
+                {uploadingPhoto ? (
+                  <View
+                    style={
+                      styles.avatarLoadingOverlay
+                    }
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color="#FFFFFF"
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              <View
+                style={
+                  styles.cameraBadge
+                }
+              >
+                <Ionicons
+                  name="camera"
+                  size={15}
+                  color="#FFFFFF"
+                />
+              </View>
+            </Pressable>
 
             <Text
               style={
                 styles.name
               }
             >
-              {displayName}
+              {profileLoading
+                ? 'Loading...'
+                : displayName}
             </Text>
 
             <Text
@@ -404,37 +1147,42 @@ export default function ProfileScreen() {
                 styles.username
               }
             >
-              @{username}
+              {profileLoading
+                ? '@...'
+                : `@${username}`}
             </Text>
 
-            <Text
-              style={
-                styles.bio
-              }
-            >
-              Exploring the world
-              one trip at a time ✈️
-            </Text>
-
-            <View
-              style={
-                styles.locationRow
-              }
-            >
-              <Ionicons
-                name="location-outline"
-                size={15}
-                color="#6B7280"
-              />
-
+            {bio ? (
               <Text
                 style={
-                  styles.locationText
+                  styles.bio
                 }
               >
-                Singapore
+                {bio}
               </Text>
-            </View>
+            ) : null}
+
+            {location ? (
+              <View
+                style={
+                  styles.locationRow
+                }
+              >
+                <Ionicons
+                  name="location-outline"
+                  size={15}
+                  color="#6B7280"
+                />
+
+                <Text
+                  style={
+                    styles.locationText
+                  }
+                >
+                  {location}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* ================================================= */}
@@ -484,10 +1232,8 @@ export default function ProfileScreen() {
             style={
               styles.editProfileButton
             }
-            onPress={() =>
-              showComingSoon(
-                'Edit Profile'
-              )
+            onPress={
+              openPersonalInformation
             }
           >
             <Ionicons
@@ -722,10 +1468,8 @@ export default function ProfileScreen() {
           }
           transparent
           animationType="slide"
-          onRequestClose={() =>
-            setSettingsVisible(
-              false
-            )
+          onRequestClose={
+            closeSettings
           }
         >
           <View
@@ -737,176 +1481,600 @@ export default function ProfileScreen() {
               style={
                 styles.modalBackdrop
               }
-              onPress={() =>
-                setSettingsVisible(
-                  false
-                )
+              onPress={
+                closeSettings
               }
             />
 
             <View
-              style={
-                styles.settingsSheet
-              }
-            >
-              {/* DRAG BAR */}
+              style={[
+                styles.settingsSheet,
 
+                settingsPage ===
+                  'personal' &&
+                  styles.personalSettingsSheet,
+              ]}
+            >
               <View
                 style={
                   styles.dragBar
                 }
               />
 
-              {/* SETTINGS HEADER */}
+              {settingsPage ===
+              'main' ? (
+                <>
+                  <View
+                    style={
+                      styles.settingsHeader
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.settingsTitle
+                      }
+                    >
+                      Settings
+                    </Text>
 
-              <View
-                style={
-                  styles.settingsHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.settingsTitle
-                  }
-                >
-                  Settings
-                </Text>
+                    <Pressable
+                      style={
+                        styles.closeButton
+                      }
+                      onPress={
+                        closeSettings
+                      }
+                    >
+                      <Ionicons
+                        name="close"
+                        size={22}
+                        color="#111827"
+                      />
+                    </Pressable>
+                  </View>
 
-                <Pressable
-                  style={
-                    styles.closeButton
-                  }
-                  onPress={() =>
-                    setSettingsVisible(
+                  <View
+                    style={
+                      styles.settingsProfile
+                    }
+                  >
+                    <Pressable
+                      style={
+                        styles.smallAvatar
+                      }
+                      disabled={
+                        uploadingPhoto
+                      }
+                      onPress={() =>
+                        void chooseProfilePicture()
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Change profile picture"
+                    >
+                      {photoURL ? (
+                        <Image
+                          source={{
+                            uri:
+                              photoURL,
+                          }}
+                          style={
+                            styles.smallAvatarImage
+                          }
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text
+                          style={
+                            styles.smallAvatarText
+                          }
+                        >
+                          {initials}
+                        </Text>
+                      )}
+                    </Pressable>
+
+                    <View
+                      style={
+                        styles.settingsUserInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.settingsName
+                        }
+                      >
+                        {profileLoading
+                          ? 'Loading...'
+                          : displayName}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.settingsEmail
+                        }
+                      >
+                        {profileLoading
+                          ? 'Loading account...'
+                          : email}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={
+                      styles.menuContainer
+                    }
+                  >
+                    <SettingsItem
+                      icon="person-outline"
+                      title="Personal Information"
+                      onPress={
+                        openPersonalInformation
+                      }
+                    />
+
+                    <SettingsItem
+                      icon="heart-outline"
+                      title="Travel Preferences"
+                      onPress={() =>
+                        showComingSoon(
+                          'Travel Preferences'
+                        )
+                      }
+                    />
+
+                    <SettingsItem
+                      icon="notifications-outline"
+                      title="Notifications"
+                      onPress={() =>
+                        showComingSoon(
+                          'Notifications'
+                        )
+                      }
+                    />
+
+                    <SettingsItem
+                      icon="help-circle-outline"
+                      title="Help & Support"
+                      onPress={() =>
+                        showComingSoon(
+                          'Help & Support'
+                        )
+                      }
+                      last
+                    />
+                  </View>
+
+                  <Pressable
+                    style={
+                      styles.logoutButton
+                    }
+                    onPress={
+                      confirmLogout
+                    }
+                  >
+                    <Ionicons
+                      name="log-out-outline"
+                      size={19}
+                      color="#DC2626"
+                    />
+
+                    <Text
+                      style={
+                        styles.logoutText
+                      }
+                    >
+                      Log Out
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <View
+                    style={
+                      styles.personalHeader
+                    }
+                  >
+                    <Pressable
+                      style={
+                        styles.personalBackButton
+                      }
+                      disabled={
+                        savingProfile
+                      }
+                      onPress={() =>
+                        setSettingsPage(
+                          'main'
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name="arrow-back"
+                        size={21}
+                        color="#111827"
+                      />
+                    </Pressable>
+
+                    <View
+                      style={
+                        styles.personalHeaderText
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.personalTitle
+                        }
+                      >
+                        Personal Information
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.personalSubtitle
+                        }
+                      >
+                        Update how your profile appears on BonVoyage
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      style={
+                        styles.closeButton
+                      }
+                      disabled={
+                        savingProfile
+                      }
+                      onPress={
+                        closeSettings
+                      }
+                    >
+                      <Ionicons
+                        name="close"
+                        size={22}
+                        color="#111827"
+                      />
+                    </Pressable>
+                  </View>
+
+                  <ScrollView
+                    style={
+                      styles.personalFormScroll
+                    }
+                    contentContainerStyle={
+                      styles.personalFormContent
+                    }
+                    showsVerticalScrollIndicator={
                       false
-                    )
-                  }
-                >
-                  <Ionicons
-                    name="close"
-                    size={22}
-                    color="#111827"
-                  />
-                </Pressable>
-              </View>
-
-              {/* ACCOUNT */}
-
-              <View
-                style={
-                  styles.settingsProfile
-                }
-              >
-                <View
-                  style={
-                    styles.smallAvatar
-                  }
-                >
-                  <Text
-                    style={
-                      styles.smallAvatarText
                     }
+                    keyboardShouldPersistTaps="handled"
                   >
-                    {initials}
-                  </Text>
-                </View>
+                    <View
+                      style={
+                        styles.photoEditor
+                      }
+                    >
+                      <Pressable
+                        style={
+                          styles.editAvatarButton
+                        }
+                        disabled={
+                          uploadingPhoto
+                        }
+                        onPress={() =>
+                          void chooseProfilePicture()
+                        }
+                      >
+                        <View
+                          style={
+                            styles.editAvatar
+                          }
+                        >
+                          {photoURL ? (
+                            <Image
+                              source={{
+                                uri:
+                                  photoURL,
+                              }}
+                              style={
+                                styles.editAvatarImage
+                              }
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <Text
+                              style={
+                                styles.editAvatarText
+                              }
+                            >
+                              {initials}
+                            </Text>
+                          )}
 
-                <View
-                  style={
-                    styles.settingsUserInfo
-                  }
-                >
-                  <Text
-                    style={
-                      styles.settingsName
-                    }
-                  >
-                    {displayName}
-                  </Text>
+                          {uploadingPhoto ? (
+                            <View
+                              style={
+                                styles.editAvatarLoading
+                              }
+                            >
+                              <ActivityIndicator
+                                size="small"
+                                color="#FFFFFF"
+                              />
+                            </View>
+                          ) : null}
+                        </View>
 
-                  <Text
-                    style={
-                      styles.settingsEmail
-                    }
-                  >
-                    {email}
-                  </Text>
-                </View>
-              </View>
+                        <View
+                          style={
+                            styles.editAvatarCamera
+                          }
+                        >
+                          <Ionicons
+                            name="camera"
+                            size={14}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                      </Pressable>
 
-              {/* SETTINGS ITEMS */}
+                      <View
+                        style={
+                          styles.photoEditorText
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.photoEditorTitle
+                          }
+                        >
+                          Profile picture
+                        </Text>
 
-              <View
-                style={
-                  styles.menuContainer
-                }
-              >
-                <SettingsItem
-                  icon="person-outline"
-                  title="Personal Information"
-                  onPress={() =>
-                    showComingSoon(
-                      'Personal Information'
-                    )
-                  }
-                />
+                        <Pressable
+                          disabled={
+                            uploadingPhoto
+                          }
+                          onPress={() =>
+                            void chooseProfilePicture()
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.changePhotoText
+                            }
+                          >
+                            {uploadingPhoto
+                              ? 'Uploading...'
+                              : 'Change photo'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
 
-                <SettingsItem
-                  icon="heart-outline"
-                  title="Travel Preferences"
-                  onPress={() =>
-                    showComingSoon(
-                      'Travel Preferences'
-                    )
-                  }
-                />
+                    <Text
+                      style={
+                        styles.formLabel
+                      }
+                    >
+                      Full name
+                    </Text>
 
-                <SettingsItem
-                  icon="notifications-outline"
-                  title="Notifications"
-                  onPress={() =>
-                    showComingSoon(
-                      'Notifications'
-                    )
-                  }
-                />
+                    <TextInput
+                      style={
+                        styles.formInput
+                      }
+                      value={
+                        editName
+                      }
+                      onChangeText={
+                        setEditName
+                      }
+                      placeholder="Your name"
+                      placeholderTextColor="#9CA3AF"
+                      autoCapitalize="words"
+                      maxLength={50}
+                    />
 
-                <SettingsItem
-                  icon="help-circle-outline"
-                  title="Help & Support"
-                  onPress={() =>
-                    showComingSoon(
-                      'Help & Support'
-                    )
-                  }
-                  last
-                />
-              </View>
+                    <Text
+                      style={
+                        styles.formLabel
+                      }
+                    >
+                      Username
+                    </Text>
 
-              {/* LOGOUT */}
+                    <View
+                      style={
+                        styles.readOnlyField
+                      }
+                    >
+                      <Ionicons
+                        name="at"
+                        size={17}
+                        color="#6B7280"
+                      />
 
-              <Pressable
-                style={
-                  styles.logoutButton
-                }
-                onPress={
-                  confirmLogout
-                }
-              >
-                <Ionicons
-                  name="log-out-outline"
-                  size={19}
-                  color="#DC2626"
-                />
+                      <Text
+                        style={
+                          styles.readOnlyText
+                        }
+                      >
+                        {username}
+                      </Text>
 
-                <Text
-                  style={
-                    styles.logoutText
-                  }
-                >
-                  Log Out
-                </Text>
-              </Pressable>
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={15}
+                        color="#9CA3AF"
+                      />
+                    </View>
+
+                    <Text
+                      style={
+                        styles.formHint
+                      }
+                    >
+                      Usernames are unique and cannot be changed here.
+                    </Text>
+
+                    <View
+                      style={
+                        styles.formLabelRow
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.formLabelNoMargin
+                        }
+                      >
+                        Bio
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.characterCount
+                        }
+                      >
+                        {editBio.length}/120
+                      </Text>
+                    </View>
+
+                    <TextInput
+                      style={[
+                        styles.formInput,
+                        styles.bioInput,
+                      ]}
+                      value={
+                        editBio
+                      }
+                      onChangeText={
+                        setEditBio
+                      }
+                      placeholder="Tell travellers a little about yourself..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      textAlignVertical="top"
+                      maxLength={120}
+                    />
+
+                    <Text
+                      style={
+                        styles.formLabel
+                      }
+                    >
+                      Location
+                    </Text>
+
+                    <View
+                      style={
+                        styles.formInputWithIcon
+                      }
+                    >
+                      <Ionicons
+                        name="location-outline"
+                        size={18}
+                        color="#6B7280"
+                      />
+
+                      <TextInput
+                        style={
+                          styles.formInputInner
+                        }
+                        value={
+                          editLocation
+                        }
+                        onChangeText={
+                          setEditLocation
+                        }
+                        placeholder="e.g. Singapore"
+                        placeholderTextColor="#9CA3AF"
+                        maxLength={50}
+                      />
+                    </View>
+
+                    <Text
+                      style={
+                        styles.formLabel
+                      }
+                    >
+                      Email
+                    </Text>
+
+                    <View
+                      style={
+                        styles.readOnlyField
+                      }
+                    >
+                      <Ionicons
+                        name="mail-outline"
+                        size={17}
+                        color="#6B7280"
+                      />
+
+                      <Text
+                        style={
+                          styles.readOnlyText
+                        }
+                        numberOfLines={1}
+                      >
+                        {email}
+                      </Text>
+
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={15}
+                        color="#9CA3AF"
+                      />
+                    </View>
+
+                    <Text
+                      style={
+                        styles.formHint
+                      }
+                    >
+                      Email changes are not available from this screen.
+                    </Text>
+
+                    <Pressable
+                      style={[
+                        styles.saveProfileButton,
+
+                        savingProfile &&
+                          styles.saveProfileButtonDisabled,
+                      ]}
+                      disabled={
+                        savingProfile
+                      }
+                      onPress={() =>
+                        void savePersonalInformation()
+                      }
+                    >
+                      {savingProfile ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#FFFFFF"
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color="#FFFFFF"
+                        />
+                      )}
+
+                      <Text
+                        style={
+                          styles.saveProfileText
+                        }
+                      >
+                        {savingProfile
+                          ? 'Saving...'
+                          : 'Save changes'}
+                      </Text>
+                    </Pressable>
+                  </ScrollView>
+                </>
+              )}
             </View>
           </View>
         </Modal>
@@ -1545,6 +2713,21 @@ const styles =
       paddingTop: 16,
     },
 
+    avatarButton: {
+      position:
+        'relative',
+
+      width: 100,
+
+      height: 100,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
     avatar: {
       width: 92,
 
@@ -1577,6 +2760,79 @@ const styles =
       shadowOffset: {
         width: 0,
         height: 3,
+      },
+
+      elevation: 3,
+    },
+
+    avatarImage: {
+      width: '100%',
+
+      height: '100%',
+
+      borderRadius: 46,
+    },
+
+    avatarLoadingOverlay: {
+      position:
+        'absolute',
+
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      borderRadius: 46,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        'rgba(0,0,0,0.35)',
+    },
+
+    cameraBadge: {
+      position:
+        'absolute',
+
+      right: 0,
+
+      bottom: 5,
+
+      width: 31,
+
+      height: 31,
+
+      borderRadius: 16,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 3,
+
+      borderColor:
+        '#FFFFFF',
+
+      backgroundColor:
+        '#1769E8',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity:
+        0.12,
+
+      shadowRadius: 4,
+
+      shadowOffset: {
+        width: 0,
+        height: 2,
       },
 
       elevation: 3,
@@ -2254,6 +3510,371 @@ const styles =
         '#F3F4F6',
     },
 
+    personalSettingsSheet: {
+      maxHeight: '88%',
+    },
+
+    personalHeader: {
+      marginTop: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    personalBackButton: {
+      width: 38,
+
+      height: 38,
+
+      borderRadius: 19,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    personalHeaderText: {
+      flex: 1,
+
+      marginHorizontal: 10,
+    },
+
+    personalTitle: {
+      fontSize: 18,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    personalSubtitle: {
+      marginTop: 3,
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      color: '#6B7280',
+    },
+
+    personalFormScroll: {
+      marginTop: 16,
+    },
+
+    personalFormContent: {
+      paddingBottom: 6,
+    },
+
+    photoEditor: {
+      paddingBottom: 18,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        '#F3F4F6',
+    },
+
+    editAvatarButton: {
+      position:
+        'relative',
+
+      width: 72,
+
+      height: 72,
+    },
+
+    editAvatar: {
+      width: 72,
+
+      height: 72,
+
+      overflow:
+        'hidden',
+
+      borderRadius: 36,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#DCEBFF',
+    },
+
+    editAvatarImage: {
+      width: '100%',
+
+      height: '100%',
+    },
+
+    editAvatarText: {
+      fontSize: 21,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    editAvatarLoading: {
+      position:
+        'absolute',
+
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        'rgba(0,0,0,0.35)',
+    },
+
+    editAvatarCamera: {
+      position:
+        'absolute',
+
+      right: -1,
+
+      bottom: 1,
+
+      width: 27,
+
+      height: 27,
+
+      borderRadius: 14,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 2,
+
+      borderColor:
+        '#FFFFFF',
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    photoEditorText: {
+      marginLeft: 15,
+    },
+
+    photoEditorTitle: {
+      fontSize: 14,
+
+      fontWeight: '700',
+
+      color: '#111827',
+    },
+
+    changePhotoText: {
+      marginTop: 5,
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#1769E8',
+    },
+
+    formLabel: {
+      marginTop: 13,
+
+      marginBottom: 7,
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#374151',
+    },
+
+    formLabelRow: {
+      marginTop: 13,
+
+      marginBottom: 7,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    formLabelNoMargin: {
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#374151',
+    },
+
+    characterCount: {
+      fontSize: 10,
+
+      color: '#9CA3AF',
+    },
+
+    formInput: {
+      minHeight: 50,
+
+      paddingHorizontal: 14,
+
+      borderWidth: 1,
+
+      borderColor: '#D1D5DB',
+
+      borderRadius: 13,
+
+      fontSize: 14,
+
+      color: '#111827',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    bioInput: {
+      minHeight: 96,
+
+      paddingTop: 13,
+
+      paddingBottom: 13,
+    },
+
+    formInputWithIcon: {
+      minHeight: 50,
+
+      paddingHorizontal: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor: '#D1D5DB',
+
+      borderRadius: 13,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    formInputInner: {
+      flex: 1,
+
+      marginLeft: 8,
+
+      fontSize: 14,
+
+      color: '#111827',
+    },
+
+    readOnlyField: {
+      minHeight: 50,
+
+      paddingHorizontal: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor: '#E5E7EB',
+
+      borderRadius: 13,
+
+      backgroundColor:
+        '#F8FAFC',
+    },
+
+    readOnlyText: {
+      flex: 1,
+
+      marginHorizontal: 8,
+
+      fontSize: 14,
+
+      color: '#4B5563',
+    },
+
+    formHint: {
+      marginTop: 6,
+
+      fontSize: 10,
+
+      lineHeight: 15,
+
+      color: '#9CA3AF',
+    },
+
+    saveProfileButton: {
+      height: 50,
+
+      marginTop: 22,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    saveProfileButtonDisabled: {
+      opacity: 0.65,
+    },
+
+    saveProfileText: {
+      marginLeft: 7,
+
+      fontSize: 14,
+
+      fontWeight: '800',
+
+      color: '#FFFFFF',
+    },
+
     // ------------------------------------------------------
     // SETTINGS PROFILE
     // ------------------------------------------------------
@@ -2282,6 +3903,9 @@ const styles =
 
       borderRadius: 25,
 
+      overflow:
+        'hidden',
+
       alignItems:
         'center',
 
@@ -2290,6 +3914,12 @@ const styles =
 
       backgroundColor:
         '#DCEBFF',
+    },
+
+    smallAvatarImage: {
+      width: '100%',
+
+      height: '100%',
     },
 
     smallAvatarText: {

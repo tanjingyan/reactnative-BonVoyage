@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -15,9 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   collection,
+  doc,
+  getDocs,
   onSnapshot,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 import {
@@ -53,6 +58,14 @@ export default function TripsScreen() {
 
   const [loading, setLoading] =
     useState(true);
+
+  const [
+    deletingTripId,
+    setDeletingTripId,
+  ] =
+    useState<string | null>(
+      null
+    );
 
   // ========================================================
   // FIRESTORE
@@ -127,6 +140,153 @@ export default function TripsScreen() {
 
     return unsubscribe;
   }, []);
+
+  // ========================================================
+  // DELETE TRIP
+  // ========================================================
+
+  function confirmDeleteTrip(
+    trip: Trip
+  ) {
+    if (
+      deletingTripId
+    ) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete Trip',
+      `Are you sure you want to delete "${trip.title}"?\n\nThis will also delete all activities in this itinerary.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            void deleteTrip(
+              trip.id
+            ),
+        },
+      ]
+    );
+  }
+
+  async function deleteTrip(
+    tripId: string
+  ) {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      Alert.alert(
+        'Login required',
+        'Please log in again before deleting a trip.'
+      );
+
+      return;
+    }
+
+    try {
+      setDeletingTripId(
+        tripId
+      );
+
+      /*
+       * Firestore does not automatically remove
+       * subcollections when the parent document is deleted,
+       * so the activities are removed first.
+       */
+      const activitiesSnapshot =
+        await getDocs(
+          collection(
+            db,
+            'trips',
+            tripId,
+            'activities'
+          )
+        );
+
+      /*
+       * Firestore batches support up to 500 operations.
+       * This app's personal itineraries are far below that,
+       * but chunking keeps the deletion safe if a trip grows.
+       */
+      const activityDocs =
+        activitiesSnapshot.docs;
+
+      const batchSize =
+        450;
+
+      for (
+        let index = 0;
+        index <
+        activityDocs.length;
+        index += batchSize
+      ) {
+        const batch =
+          writeBatch(db);
+
+        activityDocs
+          .slice(
+            index,
+            index +
+              batchSize
+          )
+          .forEach(
+            activityDocument => {
+              batch.delete(
+                activityDocument.ref
+              );
+            }
+          );
+
+        await batch.commit();
+      }
+
+      /*
+       * Delete the trip only after its activities
+       * have been removed successfully.
+       */
+      const tripBatch =
+        writeBatch(db);
+
+      tripBatch.delete(
+        doc(
+          db,
+          'trips',
+          tripId
+        )
+      );
+
+      await tripBatch.commit();
+
+      /*
+       * onSnapshot() automatically removes the deleted trip
+       * from the list, so no manual setTrips() is required.
+       */
+      Alert.alert(
+        'Trip deleted',
+        'The trip has been removed successfully.'
+      );
+    } catch (error) {
+      console.error(
+        'Delete trip error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to delete trip',
+        'BonVoyage could not delete this trip. Please try again.'
+      );
+    } finally {
+      setDeletingTripId(
+        null
+      );
+    }
+  }
 
   // ========================================================
   // UI
@@ -311,6 +471,15 @@ export default function TripsScreen() {
             }) => (
               <TripCard
                 trip={item}
+                deleting={
+                  deletingTripId ===
+                  item.id
+                }
+                onDelete={() =>
+                  confirmDeleteTrip(
+                    item
+                  )
+                }
               />
             )}
           />
@@ -326,8 +495,12 @@ export default function TripsScreen() {
 
 function TripCard({
   trip,
+  deleting,
+  onDelete,
 }: {
   trip: Trip;
+  deleting: boolean;
+  onDelete: () => void;
 }) {
   const status =
     getTripStatus(
@@ -337,12 +510,6 @@ function TripCard({
 
   const duration =
     getTripDuration(
-      trip.startDate,
-      trip.endDate
-    );
-
-  const relativeText =
-    getRelativeTripText(
       trip.startDate,
       trip.endDate
     );
@@ -371,119 +538,109 @@ function TripCard({
       }
     >
       {/* =================================================== */}
-      {/* TOP ROW                                             */}
+      {/* DESTINATION IMAGE                                   */}
+      {/* =================================================== */}
+
+      <Image
+        source={{
+          uri:
+            getTripImage(
+              trip.destination
+            ),
+        }}
+        style={
+          styles.tripImage
+        }
+        resizeMode="cover"
+      />
+
+      {/* =================================================== */}
+      {/* TRIP INFORMATION                                    */}
       {/* =================================================== */}
 
       <View
         style={
-          styles.cardTop
+          styles.tripContent
         }
       >
         <View
           style={
-            styles.tripIconContainer
+            styles.statusRow
           }
         >
-          <Ionicons
-            name="airplane-outline"
-            size={24}
-            color="#1769E8"
+          <CompactStatusBadge
+            status={
+              status
+            }
           />
         </View>
 
-        <StatusBadge
-          status={
-            status
-          }
-        />
-      </View>
-
-      {/* =================================================== */}
-      {/* TITLE                                               */}
-      {/* =================================================== */}
-
-      <Text
-        style={
-          styles.tripTitle
-        }
-        numberOfLines={2}
-      >
-        {trip.title}
-      </Text>
-
-      {/* =================================================== */}
-      {/* DESTINATION                                         */}
-      {/* =================================================== */}
-
-      <View
-        style={
-          styles.infoRow
-        }
-      >
-        <Ionicons
-          name="location-outline"
-          size={17}
-          color="#6B7280"
-        />
-
         <Text
           style={
-            styles.destination
+            styles.tripTitle
           }
           numberOfLines={1}
         >
-          {trip.destination}
+          {trip.title}
         </Text>
-      </View>
 
-      {/* =================================================== */}
-      {/* DATES                                               */}
-      {/* =================================================== */}
-
-      <View
-        style={
-          styles.infoRow
-        }
-      >
-        <Ionicons
-          name="calendar-outline"
-          size={17}
-          color="#6B7280"
-        />
-
-        <Text
-          style={
-            styles.date
-          }
-        >
-          {formatTripDate(
-            trip.startDate
-          )}
-          {'  –  '}
-          {formatTripDate(
-            trip.endDate
-          )}
-        </Text>
-      </View>
-
-      {/* =================================================== */}
-      {/* DURATION + RELATIVE DATE                            */}
-      {/* =================================================== */}
-
-      <View
-        style={
-          styles.tripMetaRow
-        }
-      >
         <View
           style={
-            styles.durationPill
+            styles.infoRow
+          }
+        >
+          <Ionicons
+            name="location-outline"
+            size={13}
+            color="#6B7280"
+          />
+
+          <Text
+            style={
+              styles.infoText
+            }
+            numberOfLines={1}
+          >
+            {trip.destination}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.infoRow
+          }
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={13}
+            color="#6B7280"
+          />
+
+          <Text
+            style={
+              styles.infoText
+            }
+            numberOfLines={1}
+          >
+            {formatTripDateShort(
+              trip.startDate
+            )}
+            {' - '}
+            {formatTripDateShort(
+              trip.endDate
+            )}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.durationRow
           }
         >
           <Ionicons
             name="time-outline"
-            size={14}
-            color="#4B5563"
+            size={13}
+            color="#1769E8"
           />
 
           <Text
@@ -497,95 +654,62 @@ function TripCard({
               : 'days'}
           </Text>
         </View>
-
-        <Text
-          style={[
-            styles.relativeText,
-
-            status ===
-              'ongoing' &&
-              styles.relativeTextOngoing,
-          ]}
-        >
-          {relativeText}
-        </Text>
       </View>
 
       {/* =================================================== */}
-      {/* NOTES                                               */}
-      {/* =================================================== */}
-
-      {trip.notes?.trim() ? (
-        <View
-          style={
-            styles.notesContainer
-          }
-        >
-          <Ionicons
-            name="document-text-outline"
-            size={16}
-            color="#6B7280"
-          />
-
-          <Text
-            style={
-              styles.notes
-            }
-            numberOfLines={2}
-          >
-            {trip.notes}
-          </Text>
-        </View>
-      ) : null}
-
-      {/* =================================================== */}
-      {/* FOOTER                                              */}
+      {/* ACTIONS                                             */}
       {/* =================================================== */}
 
       <View
         style={
-          styles.cardFooter
+          styles.cardActions
         }
       >
-        <View
-          style={
-            styles.privateTripLabel
+        <Pressable
+          style={({ pressed }) => [
+            styles.deleteTripButton,
+
+            pressed &&
+            !deleting &&
+              styles.deleteTripButtonPressed,
+
+            deleting &&
+              styles.deleteTripButtonDisabled,
+          ]}
+          disabled={
+            deleting
           }
+          onPress={event => {
+            /*
+             * The entire trip card is tappable.
+             * Prevent deleting from also opening Trip Details.
+             */
+            event.stopPropagation();
+
+            onDelete();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${trip.title}`}
         >
-          <Ionicons
-            name="lock-closed"
-            size={12}
-            color="#9CA3AF"
-          />
+          {deleting ? (
+            <ActivityIndicator
+              size="small"
+              color="#DC2626"
+            />
+          ) : (
+            <Ionicons
+              name="trash-outline"
+              size={16}
+              color="#DC2626"
+            />
+          )}
+        </Pressable>
 
-          <Text
-            style={
-              styles.privateTripText
-            }
-          >
-            Personal itinerary
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.viewTripContainer
-          }
-        >
-          <Text
-            style={
-              styles.viewTripText
-            }
-          >
-            View trip
-          </Text>
-
-          <Ionicons
-            name="arrow-forward"
-            size={16}
-            color="#1769E8"
-          />
-        </View>
+        <Ionicons
+          name="chevron-forward"
+          size={22}
+          color="#9CA3AF"
+        />
       </View>
     </Pressable>
   );
@@ -594,6 +718,77 @@ function TripCard({
 // ==========================================================
 // STATUS BADGE
 // ==========================================================
+
+function CompactStatusBadge({
+  status,
+}: {
+  status: TripStatus;
+}) {
+  if (
+    status ===
+    'ongoing'
+  ) {
+    return (
+      <View
+        style={[
+          styles.compactStatusBadge,
+          styles.ongoingBadge,
+        ]}
+      >
+        <Text
+          style={[
+            styles.compactStatusText,
+            styles.ongoingText,
+          ]}
+        >
+          In progress
+        </Text>
+      </View>
+    );
+  }
+
+  if (
+    status ===
+    'upcoming'
+  ) {
+    return (
+      <View
+        style={[
+          styles.compactStatusBadge,
+          styles.upcomingBadge,
+        ]}
+      >
+        <Text
+          style={[
+            styles.compactStatusText,
+            styles.upcomingText,
+          ]}
+        >
+          Upcoming
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.compactStatusBadge,
+        styles.pastTripBadge,
+      ]}
+    >
+      <Text
+        style={[
+          styles.compactStatusText,
+          styles.pastTripText,
+        ]}
+      >
+        Past trip
+      </Text>
+    </View>
+  );
+}
+
 
 function StatusBadge({
   status,
@@ -776,6 +971,24 @@ function formatTripDate(
       day: '2-digit',
       month: 'short',
       year: 'numeric',
+    }
+  );
+}
+
+
+function formatTripDateShort(
+  dateString: string
+) {
+  const date =
+    new Date(
+      dateString
+    );
+
+  return date.toLocaleDateString(
+    'en-GB',
+    {
+      day: '2-digit',
+      month: 'short',
     }
   );
 }
@@ -1072,6 +1285,85 @@ function compareTrips(
   );
 }
 
+
+// ==========================================================
+// TRIP IMAGE
+// ==========================================================
+
+function getTripImage(
+  destination: string
+) {
+  const value =
+    destination
+      .toLowerCase()
+      .trim();
+
+  if (
+    value.includes(
+      'tokyo'
+    ) ||
+    value.includes(
+      'japan'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=900';
+  }
+
+  if (
+    value.includes(
+      'singapore'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=900';
+  }
+
+  if (
+    value.includes(
+      'paris'
+    ) ||
+    value.includes(
+      'france'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=900';
+  }
+
+  if (
+    value.includes(
+      'bali'
+    ) ||
+    value.includes(
+      'indonesia'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900';
+  }
+
+  if (
+    value.includes(
+      'seoul'
+    ) ||
+    value.includes(
+      'korea'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1538485399081-7c897003c6e5?w=900';
+  }
+
+  if (
+    value.includes(
+      'london'
+    ) ||
+    value.includes(
+      'england'
+    )
+  ) {
+    return 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900';
+  }
+
+  return 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=900';
+}
+
 // ==========================================================
 // STYLES
 // ==========================================================
@@ -1267,7 +1559,7 @@ const styles =
 
       paddingBottom: 120,
 
-      gap: 15,
+      gap: 12,
     },
 
     // ======================================================
@@ -1275,14 +1567,22 @@ const styles =
     // ======================================================
 
     tripCard: {
-      padding: 17,
+      minHeight: 126,
+
+      padding: 11,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
 
       borderWidth: 1,
 
       borderColor:
         '#E5E7EB',
 
-      borderRadius: 20,
+      borderRadius: 18,
 
       backgroundColor:
         '#FFFFFF',
@@ -1290,9 +1590,9 @@ const styles =
       shadowColor:
         '#000000',
 
-      shadowOpacity: 0.04,
+      shadowOpacity: 0.06,
 
-      shadowRadius: 8,
+      shadowRadius: 7,
 
       shadowOffset: {
         width: 0,
@@ -1312,9 +1612,126 @@ const styles =
       ],
     },
 
-    cardTop: {
+    tripImage: {
+      width: 96,
+
+      height: 104,
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#E5E7EB',
+    },
+
+    tripContent: {
+      flex: 1,
+
+      minWidth: 0,
+
+      marginLeft: 12,
+
+      alignSelf:
+        'stretch',
+
+      justifyContent:
+        'center',
+    },
+
+    statusRow: {
+      minHeight: 23,
+
       flexDirection:
         'row',
+
+      alignItems:
+        'center',
+    },
+
+    compactStatusBadge: {
+      alignSelf:
+        'flex-start',
+
+      paddingHorizontal: 8,
+
+      paddingVertical: 4,
+
+      borderRadius: 12,
+    },
+
+    compactStatusText: {
+      fontSize: 9,
+
+      fontWeight: '800',
+    },
+
+    pastTripBadge: {
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    pastTripText: {
+      color: '#1769E8',
+    },
+
+    tripTitle: {
+      marginTop: 2,
+
+      marginBottom: 4,
+
+      fontSize: 18,
+
+      fontWeight: '800',
+
+      letterSpacing: -0.25,
+
+      color: '#111827',
+    },
+
+    infoRow: {
+      minHeight: 20,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    infoText: {
+      flex: 1,
+
+      marginLeft: 5,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    durationRow: {
+      minHeight: 20,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    durationText: {
+      marginLeft: 5,
+
+      fontSize: 11,
+
+      fontWeight: '700',
+
+      color: '#1769E8',
+    },
+
+    cardActions: {
+      width: 38,
+
+      alignSelf:
+        'stretch',
 
       alignItems:
         'center',
@@ -1322,14 +1739,17 @@ const styles =
       justifyContent:
         'space-between',
 
-      marginBottom: 14,
+      paddingVertical: 4,
+
+      marginLeft: 4,
     },
 
-    tripIconContainer: {
-      width: 44,
-      height: 44,
+    deleteTripButton: {
+      width: 32,
 
-      borderRadius: 14,
+      height: 32,
+
+      borderRadius: 11,
 
       alignItems:
         'center',
@@ -1338,7 +1758,21 @@ const styles =
         'center',
 
       backgroundColor:
-        '#EEF4FF',
+        '#FEF2F2',
+    },
+
+    deleteTripButtonPressed: {
+      opacity: 0.7,
+
+      transform: [
+        {
+          scale: 0.95,
+        },
+      ],
+    },
+
+    deleteTripButtonDisabled: {
+      opacity: 0.55,
     },
 
     // ======================================================
@@ -1415,196 +1849,6 @@ const styles =
 
     pastText: {
       color: '#6B7280',
-    },
-
-    // ======================================================
-    // TRIP DETAILS
-    // ======================================================
-
-    tripTitle: {
-      marginBottom: 10,
-
-      fontSize: 23,
-
-      fontWeight: '800',
-
-      letterSpacing: -0.3,
-
-      color: '#111827',
-    },
-
-    infoRow: {
-      minHeight: 29,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    destination: {
-      flex: 1,
-
-      marginLeft: 7,
-
-      fontSize: 13,
-
-      fontWeight: '600',
-
-      color: '#374151',
-    },
-
-    date: {
-      marginLeft: 7,
-
-      fontSize: 12,
-
-      color: '#6B7280',
-    },
-
-    // ======================================================
-    // META
-    // ======================================================
-
-    tripMetaRow: {
-      marginTop: 10,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-    },
-
-    durationPill: {
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      borderRadius: 9,
-
-      backgroundColor:
-        '#F3F4F6',
-    },
-
-    durationText: {
-      marginLeft: 5,
-
-      fontSize: 11,
-
-      fontWeight: '700',
-
-      color: '#4B5563',
-    },
-
-    relativeText: {
-      fontSize: 11,
-
-      fontWeight: '600',
-
-      color: '#6B7280',
-    },
-
-    relativeTextOngoing: {
-      color: '#059669',
-    },
-
-    // ======================================================
-    // NOTES
-    // ======================================================
-
-    notesContainer: {
-      marginTop: 14,
-
-      padding: 12,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'flex-start',
-
-      borderRadius: 12,
-
-      backgroundColor:
-        '#F9FAFB',
-    },
-
-    notes: {
-      flex: 1,
-
-      marginLeft: 7,
-
-      fontSize: 12,
-      lineHeight: 18,
-
-      color: '#6B7280',
-    },
-
-    // ======================================================
-    // CARD FOOTER
-    // ======================================================
-
-    cardFooter: {
-      marginTop: 16,
-      paddingTop: 14,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-
-      borderTopWidth: 1,
-
-      borderTopColor:
-        '#F0F1F3',
-    },
-
-    privateTripLabel: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    privateTripText: {
-      marginLeft: 5,
-
-      fontSize: 10,
-
-      color: '#9CA3AF',
-    },
-
-    viewTripContainer: {
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    viewTripText: {
-      marginRight: 5,
-
-      fontSize: 12,
-
-      fontWeight: '800',
-
-      color: '#1769E8',
     },
 
     // ======================================================

@@ -17,6 +17,10 @@ import { getFirestore } from 'firebase/firestore';
 
 import { getFunctions } from 'firebase/functions';
 
+import {
+  getStorage,
+} from 'firebase/storage';
+
 const firebaseConfig = {
   apiKey: "AIzaSyBhSNHsVDsFDWmaznkhbWVHsQLzh7gVxX0",
   authDomain: "bonvoyage-d9131.firebaseapp.com",
@@ -28,6 +32,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const functions = getFunctions(app, 'asia-southeast1');
+const storage = getStorage(app);
 
 let auth: Auth;
 
@@ -45,4 +50,4 @@ try {
 
 const db = getFirestore(app);
 
-export { app, auth, db, functions };
+export { app, auth, db, functions, storage };

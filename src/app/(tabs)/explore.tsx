@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -12,12 +14,15 @@ import {
   addDoc,
   collection,
   getDocs,
+  onSnapshot,
   query as firestoreQuery,
   serverTimestamp,
   where,
 } from 'firebase/firestore';
 
 import {
+  useEffect,
+  useMemo,
   useState,
 } from 'react';
 
@@ -112,6 +117,35 @@ type TripOption = {
   endDate: string;
 };
 
+type Guide = {
+  id: string;
+  userId: string;
+  creatorName: string;
+  creatorUsername: string;
+  title: string;
+  destination: string;
+  caption: string;
+  coverImage: string | null;
+  durationDays: number;
+  isPublished: boolean;
+  likeCount: number;
+  saveCount: number;
+  commentCount?: number;
+  tips?: string[];
+  createdAt?: {
+    seconds?: number;
+  } | null;
+};
+
+type TravellerSummary = {
+  userId: string;
+  displayName: string;
+  username: string;
+  guideCount: number;
+  destinations: string[];
+  coverImage: string | null;
+};
+
 // ==========================================================
 // SCREEN
 // ==========================================================
@@ -130,6 +164,22 @@ export default function ExploreScreen() {
     setSearchText,
   ] =
     useState('');
+
+  // ========================================================
+  // RECENT PLACE SEARCHES
+  // ========================================================
+
+  const [
+    searchFocused,
+    setSearchFocused,
+  ] =
+    useState(false);
+
+  const [
+    recentSearches,
+    setRecentSearches,
+  ] =
+    useState<string[]>([]);
 
   const [
     places,
@@ -150,6 +200,184 @@ export default function ExploreScreen() {
     setHasSearched,
   ] =
     useState(false);
+
+  // ========================================================
+  // PUBLISHED GUIDES / TRAVELLERS
+  // ========================================================
+
+  const [
+    guides,
+    setGuides,
+  ] =
+    useState<Guide[]>([]);
+
+  const [
+    guidesLoading,
+    setGuidesLoading,
+  ] =
+    useState(true);
+
+  useEffect(() => {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      setGuidesLoading(
+        false
+      );
+
+      return;
+    }
+
+    const guidesQuery =
+      firestoreQuery(
+        collection(
+          db,
+          'guides'
+        ),
+        where(
+          'isPublished',
+          '==',
+          true
+        )
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        guidesQuery,
+        snapshot => {
+          const guideList:
+            Guide[] =
+            snapshot.docs.map(
+              guideDocument => ({
+                id:
+                  guideDocument.id,
+
+                ...(guideDocument.data() as Omit<
+                  Guide,
+                  'id'
+                >),
+              })
+            );
+
+          guideList.sort(
+            (a, b) =>
+              (b.createdAt?.seconds ??
+                0) -
+              (a.createdAt?.seconds ??
+                0)
+          );
+
+          setGuides(
+            guideList
+          );
+
+          setGuidesLoading(
+            false
+          );
+        },
+        error => {
+          console.error(
+            'Explore guides error:',
+            error
+          );
+
+          setGuidesLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, []);
+
+  const filteredGuides =
+    useMemo(() => {
+      const search =
+        normaliseSocialSearch(
+          searchText
+        );
+
+      if (!search) {
+        return guides;
+      }
+
+      return guides.filter(
+        guide => {
+          const searchable =
+            [
+              guide.title,
+              guide.destination,
+              guide.caption,
+              guide.creatorName,
+              guide.creatorUsername,
+            ]
+              .join(' ')
+              .toLowerCase();
+
+          return searchable.includes(
+            search
+          );
+        }
+      );
+    }, [
+      guides,
+      searchText,
+    ]);
+
+  const travellers =
+    useMemo(
+      () =>
+        buildTravellerSummaries(
+          guides
+        ),
+      [guides]
+    );
+
+  const filteredTravellers =
+    useMemo(() => {
+      const search =
+        normaliseSocialSearch(
+          searchText
+        );
+
+      if (!search) {
+        return travellers;
+      }
+
+      return travellers.filter(
+        traveller => {
+          const searchable =
+            [
+              traveller.displayName,
+              traveller.username,
+              ...traveller.destinations,
+            ]
+              .join(' ')
+              .toLowerCase();
+
+          return searchable.includes(
+            search
+          );
+        }
+      );
+    }, [
+      travellers,
+      searchText,
+    ]);
+
+  function showTravellerGuides(
+    traveller:
+      TravellerSummary
+  ) {
+    setSearchText(
+      traveller.username
+    );
+
+    setActiveTab(
+      'guides'
+    );
+  }
 
   // ========================================================
   // ADD PLACE TO TRIP
@@ -238,6 +466,168 @@ export default function ExploreScreen() {
     useState(false);
 
   // ========================================================
+  // RECENT PLACE SEARCHES
+  // ========================================================
+
+  /*
+   * Recent searches are stored locally on the device.
+   * The storage key includes the logged-in user's UID so
+   * different BonVoyage accounts do not share search history.
+   */
+  function getRecentSearchStorageKey() {
+    const uid =
+      auth.currentUser?.uid ??
+      'guest';
+
+    return `bonvoyage_recent_place_searches_${uid}`;
+  }
+
+  useEffect(() => {
+    async function loadRecentSearches() {
+      try {
+        const stored =
+          await AsyncStorage.getItem(
+            getRecentSearchStorageKey()
+          );
+
+        if (!stored) {
+          setRecentSearches([]);
+          return;
+        }
+
+        const parsed =
+          JSON.parse(stored);
+
+        if (
+          Array.isArray(parsed)
+        ) {
+          const validSearches =
+            parsed
+              .filter(
+                value =>
+                  typeof value ===
+                  'string'
+              )
+              .slice(0, 6);
+
+          setRecentSearches(
+            validSearches
+          );
+        }
+      } catch (error) {
+        console.log(
+          'Load recent searches error:',
+          error
+        );
+
+        setRecentSearches([]);
+      }
+    }
+
+    void loadRecentSearches();
+  }, []);
+
+  async function saveRecentSearch(
+    value: string
+  ) {
+    const cleaned =
+      value.trim();
+
+    if (!cleaned) {
+      return;
+    }
+
+    const updated = [
+      cleaned,
+
+      ...recentSearches.filter(
+        item =>
+          item
+            .toLowerCase() !==
+          cleaned
+            .toLowerCase()
+      ),
+    ].slice(0, 6);
+
+    setRecentSearches(
+      updated
+    );
+
+    try {
+      await AsyncStorage.setItem(
+        getRecentSearchStorageKey(),
+        JSON.stringify(
+          updated
+        )
+      );
+    } catch (error) {
+      console.log(
+        'Save recent search error:',
+        error
+      );
+    }
+  }
+
+  function selectRecentSearch(
+    value: string
+  ) {
+    setSearchText(
+      value
+    );
+
+    setSearchFocused(
+      false
+    );
+
+    void searchPlaces(
+      value
+    );
+  }
+
+  async function removeRecentSearch(
+    value: string
+  ) {
+    const updated =
+      recentSearches.filter(
+        item =>
+          item !== value
+      );
+
+    setRecentSearches(
+      updated
+    );
+
+    try {
+      await AsyncStorage.setItem(
+        getRecentSearchStorageKey(),
+        JSON.stringify(
+          updated
+        )
+      );
+    } catch (error) {
+      console.log(
+        'Remove recent search error:',
+        error
+      );
+    }
+  }
+
+  async function clearRecentSearches() {
+    setRecentSearches([]);
+
+    try {
+      await AsyncStorage.removeItem(
+        getRecentSearchStorageKey()
+      );
+    } catch (error) {
+      console.log(
+        'Clear recent searches error:',
+        error
+      );
+    }
+  }
+
+  // ========================================================
   // SEARCH GOOGLE PLACES
   // ========================================================
 
@@ -258,6 +648,19 @@ export default function ExploreScreen() {
 
       return;
     }
+
+    /*
+     * Only Google Places searches are added to the recent
+     * search history. Guide and People searches are currently
+     * live filters and are not stored.
+     */
+    await saveRecentSearch(
+      query
+    );
+
+    setSearchFocused(
+      false
+    );
 
     try {
       setSearchLoading(
@@ -943,6 +1346,16 @@ export default function ExploreScreen() {
             onChangeText={
               setSearchText
             }
+            onFocus={() => {
+              if (
+                activeTab ===
+                'places'
+              ) {
+                setSearchFocused(
+                  true
+                );
+              }
+            }}
             placeholder={
               activeTab ===
               'places'
@@ -1006,6 +1419,137 @@ export default function ExploreScreen() {
         </View>
 
         {/* ================================================= */}
+        {/* RECENT PLACE SEARCHES                             */}
+        {/* ================================================= */}
+
+        {activeTab ===
+          'places' &&
+        searchFocused &&
+        searchText.trim()
+          .length ===
+          0 &&
+        recentSearches.length >
+          0 ? (
+          <View
+            style={
+              styles.recentSearchContainer
+            }
+          >
+            <View
+              style={
+                styles.recentSearchHeader
+              }
+            >
+              <View
+                style={
+                  styles.recentSearchHeading
+                }
+              >
+                <Ionicons
+                  name="time-outline"
+                  size={17}
+                  color="#6B7280"
+                />
+
+                <Text
+                  style={
+                    styles.recentSearchTitle
+                  }
+                >
+                  Recent searches
+                </Text>
+              </View>
+
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  void clearRecentSearches()
+                }
+              >
+                <Text
+                  style={
+                    styles.clearRecentText
+                  }
+                >
+                  Clear all
+                </Text>
+              </Pressable>
+            </View>
+
+            {recentSearches.map(
+              (
+                item,
+                index
+              ) => (
+                <View
+                  key={`${item}-${index}`}
+                  style={[
+                    styles.recentSearchItem,
+
+                    index ===
+                      recentSearches.length -
+                        1 &&
+                      styles.recentSearchItemLast,
+                  ]}
+                >
+                  <Pressable
+                    style={
+                      styles.recentSearchMain
+                    }
+                    onPress={() =>
+                      selectRecentSearch(
+                        item
+                      )
+                    }
+                  >
+                    <View
+                      style={
+                        styles.recentSearchIcon
+                      }
+                    >
+                      <Ionicons
+                        name="search-outline"
+                        size={17}
+                        color="#6B7280"
+                      />
+                    </View>
+
+                    <Text
+                      style={
+                        styles.recentSearchText
+                      }
+                      numberOfLines={1}
+                    >
+                      {item}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={
+                      styles.removeRecentButton
+                    }
+                    hitSlop={8}
+                    onPress={() =>
+                      void removeRecentSearch(
+                        item
+                      )
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${item} from recent searches`}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={18}
+                      color="#9CA3AF"
+                    />
+                  </Pressable>
+                </View>
+              )
+            )}
+          </View>
+        ) : null}
+
+        {/* ================================================= */}
         {/* TABS                                              */}
         {/* ================================================= */}
 
@@ -1026,6 +1570,10 @@ export default function ExploreScreen() {
                 'places'
               );
 
+              setSearchFocused(
+                false
+              );
+
               clearSearch();
             }}
           />
@@ -1042,6 +1590,10 @@ export default function ExploreScreen() {
                 'guides'
               );
 
+              setSearchFocused(
+                false
+              );
+
               clearSearch();
             }}
           />
@@ -1056,6 +1608,10 @@ export default function ExploreScreen() {
             onPress={() => {
               setActiveTab(
                 'people'
+              );
+
+              setSearchFocused(
+                false
               );
 
               clearSearch();
@@ -1116,7 +1672,17 @@ export default function ExploreScreen() {
 
           {activeTab ===
             'guides' && (
-            <GuidesSection />
+            <GuidesSection
+              guides={
+                filteredGuides
+              }
+              loading={
+                guidesLoading
+              }
+              searchText={
+                searchText
+              }
+            />
           )}
 
           {/* =============================================== */}
@@ -1125,7 +1691,20 @@ export default function ExploreScreen() {
 
           {activeTab ===
             'people' && (
-            <PeopleSection />
+            <PeopleSection
+              travellers={
+                filteredTravellers
+              }
+              loading={
+                guidesLoading
+              }
+              searchText={
+                searchText
+              }
+              onViewGuides={
+                showTravellerGuides
+              }
+            />
           )}
         </ScrollView>
 
@@ -2272,56 +2851,394 @@ function PlaceCard({
 // GUIDES
 // ==========================================================
 
-function GuidesSection() {
+type GuidesSectionProps = {
+  guides: Guide[];
+  loading: boolean;
+  searchText: string;
+};
+
+function GuidesSection({
+  guides,
+  loading,
+  searchText,
+}: GuidesSectionProps) {
+  if (loading) {
+    return (
+      <SocialLoading
+        icon="book-outline"
+        title="Loading travel guides..."
+      />
+    );
+  }
+
+  if (
+    guides.length ===
+    0
+  ) {
+    return (
+      <View
+        style={
+          styles.emptyContainer
+        }
+      >
+        <View
+          style={
+            styles.largeIcon
+          }
+        >
+          <Ionicons
+            name={
+              searchText.trim()
+                ? 'search-outline'
+                : 'book-outline'
+            }
+            size={34}
+            color="#1769E8"
+          />
+        </View>
+
+        <Text
+          style={
+            styles.emptyTitle
+          }
+        >
+          {searchText.trim()
+            ? 'No guides found'
+            : 'No published guides yet'}
+        </Text>
+
+        <Text
+          style={
+            styles.emptyDescription
+          }
+        >
+          {searchText.trim()
+            ? 'Try another destination, guide title or traveller.'
+            : 'Published travel guides from BonVoyage travellers will appear here.'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View
+        style={
+          styles.socialSectionHeader
+        }
+      >
+        <View>
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            Travel guides
+          </Text>
+
+          <Text
+            style={
+              styles.sectionSubtitle
+            }
+          >
+            Itinerary-style recommendations shared by travellers
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.socialCountBadge
+          }
+        >
+          <Text
+            style={
+              styles.socialCountText
+            }
+          >
+            {guides.length}
+          </Text>
+        </View>
+      </View>
+
+      {guides.map(
+        guide => (
+          <GuideCard
+            key={
+              guide.id
+            }
+            guide={
+              guide
+            }
+          />
+        )
+      )}
+    </>
+  );
+}
+
+// ==========================================================
+// GUIDE CARD
+// ==========================================================
+
+function GuideCard({
+  guide,
+}: {
+  guide: Guide;
+}) {
+  const initials =
+    getSocialInitials(
+      guide.creatorName
+    );
+
   return (
     <View
       style={
-        styles.emptyContainer
+        styles.guideCard
       }
     >
+      {/* CREATOR */}
+
       <View
         style={
-          styles.largeIcon
+          styles.guideCreatorRow
         }
       >
-        <Ionicons
-          name="book-outline"
-          size={34}
-          color="#1769E8"
-        />
+        <View
+          style={
+            styles.guideAvatar
+          }
+        >
+          <Text
+            style={
+              styles.guideAvatarText
+            }
+          >
+            {initials}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.guideCreatorInfo
+          }
+        >
+          <Text
+            style={
+              styles.guideCreatorName
+            }
+          >
+            {guide.creatorName ||
+              'BonVoyage Traveller'}
+          </Text>
+
+          <Text
+            style={
+              styles.guideCreatorUsername
+            }
+          >
+            @
+            {guide.creatorUsername ||
+              'traveller'}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.publishedBadge
+          }
+        >
+          <Text
+            style={
+              styles.publishedBadgeText
+            }
+          >
+            GUIDE
+          </Text>
+        </View>
       </View>
 
-      <Text
-        style={
-          styles.emptyTitle
-        }
-      >
-        Travel guides
-      </Text>
+      {/* COVER */}
 
-      <Text
-        style={
-          styles.emptyDescription
-        }
-      >
-        Discover itineraries
-        and recommendations
-        shared by other
-        BonVoyage travellers.
-      </Text>
+      {guide.coverImage ? (
+        <Image
+          source={{
+            uri:
+              guide.coverImage,
+          }}
+          style={
+            styles.guideImage
+          }
+          resizeMode="cover"
+        />
+      ) : (
+        <View
+          style={
+            styles.guideImagePlaceholder
+          }
+        >
+          <Ionicons
+            name="image-outline"
+            size={34}
+            color="#9CA3AF"
+          />
+        </View>
+      )}
+
+      {/* CONTENT */}
 
       <View
         style={
-          styles.comingSoonBadge
+          styles.guideContent
         }
       >
         <Text
           style={
-            styles.comingSoonText
+            styles.guideTitle
+          }
+          numberOfLines={2}
+        >
+          {guide.title}
+        </Text>
+
+        <View
+          style={
+            styles.guideLocationRow
           }
         >
-          Coming next
-        </Text>
+          <Ionicons
+            name="location-outline"
+            size={15}
+            color="#6B7280"
+          />
+
+          <Text
+            style={
+              styles.guideLocation
+            }
+            numberOfLines={1}
+          >
+            {guide.destination}
+          </Text>
+        </View>
+
+        {guide.caption ? (
+          <Text
+            style={
+              styles.guideCaption
+            }
+            numberOfLines={3}
+          >
+            {guide.caption}
+          </Text>
+        ) : null}
+
+        <View
+          style={
+            styles.guideMetaRow
+          }
+        >
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={15}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.durationDays ||
+                1}{' '}
+              {(guide.durationDays ||
+                1) ===
+              1
+                ? 'day'
+                : 'days'}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="heart-outline"
+              size={16}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.likeCount ??
+                0}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="bookmark-outline"
+              size={15}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.saveCount ??
+                0}
+            </Text>
+          </View>
+        </View>
+
+        <View
+          style={
+            styles.guideFooter
+          }
+        >
+          <Text
+            style={
+              styles.guideFooterText
+            }
+          >
+            Itinerary travel guide
+          </Text>
+
+          <View
+            style={
+              styles.guideViewHint
+            }
+          >
+            <Text
+              style={
+                styles.guideViewHintText
+              }
+            >
+              View guide
+            </Text>
+
+            <Ionicons
+              name="arrow-forward"
+              size={15}
+              color="#1769E8"
+            />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -2331,11 +3248,290 @@ function GuidesSection() {
 // PEOPLE
 // ==========================================================
 
-function PeopleSection() {
+type PeopleSectionProps = {
+  travellers:
+    TravellerSummary[];
+  loading: boolean;
+  searchText: string;
+  onViewGuides:
+    (
+      traveller:
+        TravellerSummary
+    ) => void;
+};
+
+function PeopleSection({
+  travellers,
+  loading,
+  searchText,
+  onViewGuides,
+}: PeopleSectionProps) {
+  if (loading) {
+    return (
+      <SocialLoading
+        icon="people-outline"
+        title="Finding travellers..."
+      />
+    );
+  }
+
+  if (
+    travellers.length ===
+    0
+  ) {
+    return (
+      <View
+        style={
+          styles.emptyContainer
+        }
+      >
+        <View
+          style={
+            styles.largeIcon
+          }
+        >
+          <Ionicons
+            name={
+              searchText.trim()
+                ? 'search-outline'
+                : 'people-outline'
+            }
+            size={34}
+            color="#1769E8"
+          />
+        </View>
+
+        <Text
+          style={
+            styles.emptyTitle
+          }
+        >
+          {searchText.trim()
+            ? 'No travellers found'
+            : 'No guide creators yet'}
+        </Text>
+
+        <Text
+          style={
+            styles.emptyDescription
+          }
+        >
+          {searchText.trim()
+            ? 'Try searching for another traveller or destination.'
+            : 'Travellers who publish guides will appear here.'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <View
+        style={
+          styles.socialSectionHeader
+        }
+      >
+        <View>
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            Travellers
+          </Text>
+
+          <Text
+            style={
+              styles.sectionSubtitle
+            }
+          >
+            Discover people through the guides they share
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.socialCountBadge
+          }
+        >
+          <Text
+            style={
+              styles.socialCountText
+            }
+          >
+            {travellers.length}
+          </Text>
+        </View>
+      </View>
+
+      {travellers.map(
+        traveller => (
+          <TravellerCard
+            key={
+              traveller.userId
+            }
+            traveller={
+              traveller
+            }
+            onViewGuides={() =>
+              onViewGuides(
+                traveller
+              )
+            }
+          />
+        )
+      )}
+    </>
+  );
+}
+
+// ==========================================================
+// TRAVELLER CARD
+// ==========================================================
+
+function TravellerCard({
+  traveller,
+  onViewGuides,
+}: {
+  traveller:
+    TravellerSummary;
+  onViewGuides:
+    () => void;
+}) {
+  const initials =
+    getSocialInitials(
+      traveller.displayName
+    );
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.travellerCard,
+        pressed &&
+          styles.travellerCardPressed,
+      ]}
+      onPress={
+        onViewGuides
+      }
+    >
+      <View
+        style={
+          styles.travellerAvatar
+        }
+      >
+        <Text
+          style={
+            styles.travellerAvatarText
+          }
+        >
+          {initials}
+        </Text>
+      </View>
+
+      <View
+        style={
+          styles.travellerContent
+        }
+      >
+        <Text
+          style={
+            styles.travellerName
+          }
+          numberOfLines={1}
+        >
+          {traveller.displayName}
+        </Text>
+
+        <Text
+          style={
+            styles.travellerUsername
+          }
+          numberOfLines={1}
+        >
+          @{traveller.username}
+        </Text>
+
+        <View
+          style={
+            styles.travellerMetaRow
+          }
+        >
+          <Ionicons
+            name="book-outline"
+            size={14}
+            color="#1769E8"
+          />
+
+          <Text
+            style={
+              styles.travellerGuideCount
+            }
+          >
+            {traveller.guideCount}{' '}
+            {traveller.guideCount ===
+            1
+              ? 'guide'
+              : 'guides'}
+          </Text>
+
+          {traveller.destinations
+            .length > 0 ? (
+            <>
+              <Text
+                style={
+                  styles.travellerDot
+                }
+              >
+                •
+              </Text>
+
+              <Text
+                style={
+                  styles.travellerDestination
+                }
+                numberOfLines={1}
+              >
+                {
+                  traveller
+                    .destinations[0]
+                }
+              </Text>
+            </>
+          ) : null}
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.travellerAction
+        }
+      >
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color="#1769E8"
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+// ==========================================================
+// SOCIAL LOADING
+// ==========================================================
+
+function SocialLoading({
+  icon,
+  title,
+}: {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+  title: string;
+}) {
   return (
     <View
       style={
-        styles.emptyContainer
+        styles.socialLoading
       }
     >
       <View
@@ -2344,45 +3540,159 @@ function PeopleSection() {
         }
       >
         <Ionicons
-          name="people-outline"
-          size={34}
+          name={icon}
+          size={32}
           color="#1769E8"
         />
       </View>
 
-      <Text
-        style={
-          styles.emptyTitle
-        }
-      >
-        Find travellers
-      </Text>
+      <ActivityIndicator
+        style={{
+          marginTop: 17,
+        }}
+        color="#1769E8"
+      />
 
       <Text
         style={
-          styles.emptyDescription
+          styles.socialLoadingText
         }
       >
-        Find BonVoyage users
-        and discover the travel
-        guides they have shared.
+        {title}
       </Text>
-
-      <View
-        style={
-          styles.comingSoonBadge
-        }
-      >
-        <Text
-          style={
-            styles.comingSoonText
-          }
-        >
-          Coming next
-        </Text>
-      </View>
     </View>
   );
+}
+
+// ==========================================================
+// SOCIAL HELPERS
+// ==========================================================
+
+function normaliseSocialSearch(
+  value: string
+) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(
+      /^@/,
+      ''
+    );
+}
+
+function buildTravellerSummaries(
+  guides: Guide[]
+) {
+  const travellerMap =
+    new Map<
+      string,
+      TravellerSummary
+    >();
+
+  guides.forEach(
+    guide => {
+      const existing =
+        travellerMap.get(
+          guide.userId
+        );
+
+      if (existing) {
+        existing.guideCount +=
+          1;
+
+        if (
+          guide.destination &&
+          !existing.destinations.includes(
+            guide.destination
+          )
+        ) {
+          existing.destinations.push(
+            guide.destination
+          );
+        }
+
+        if (
+          !existing.coverImage &&
+          guide.coverImage
+        ) {
+          existing.coverImage =
+            guide.coverImage;
+        }
+
+        return;
+      }
+
+      travellerMap.set(
+        guide.userId,
+        {
+          userId:
+            guide.userId,
+
+          displayName:
+            guide.creatorName ||
+            'BonVoyage Traveller',
+
+          username:
+            guide.creatorUsername ||
+            'traveller',
+
+          guideCount: 1,
+
+          destinations:
+            guide.destination
+              ? [
+                  guide.destination,
+                ]
+              : [],
+
+          coverImage:
+            guide.coverImage ??
+            null,
+        }
+      );
+    }
+  );
+
+  return Array.from(
+    travellerMap.values()
+  ).sort(
+    (a, b) =>
+      b.guideCount -
+      a.guideCount
+  );
+}
+
+function getSocialInitials(
+  name: string
+) {
+  const parts =
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+  if (
+    parts.length ===
+    0
+  ) {
+    return 'BV';
+  }
+
+  if (
+    parts.length ===
+    1
+  ) {
+    return parts[0]
+      .slice(0, 2)
+      .toUpperCase();
+  }
+
+  return (
+    parts[0][0] +
+    parts[
+      parts.length - 1
+    ][0]
+  ).toUpperCase();
 }
 
 // ==========================================================
@@ -2729,6 +4039,162 @@ const styles =
 
       backgroundColor:
         '#1769E8',
+    },
+
+    // ------------------------------------------------------
+    // RECENT SEARCHES
+    // ------------------------------------------------------
+
+    recentSearchContainer: {
+      marginHorizontal:
+        22,
+
+      marginTop: 10,
+
+      paddingHorizontal:
+        14,
+
+      paddingTop: 13,
+
+      paddingBottom: 3,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 17,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity:
+        0.04,
+
+      shadowRadius: 8,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 2,
+    },
+
+    recentSearchHeader: {
+      minHeight: 35,
+
+      paddingHorizontal: 2,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    recentSearchHeading: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      gap: 7,
+    },
+
+    recentSearchTitle: {
+      fontSize: 13,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    clearRecentText: {
+      fontSize: 11,
+
+      fontWeight: '700',
+
+      color: '#1769E8',
+    },
+
+    recentSearchItem: {
+      minHeight: 50,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderTopWidth: 1,
+
+      borderTopColor:
+        '#F0F1F3',
+    },
+
+    recentSearchItemLast: {
+      borderBottomWidth: 0,
+    },
+
+    recentSearchMain: {
+      flex: 1,
+
+      minHeight: 50,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      paddingRight: 8,
+    },
+
+    recentSearchIcon: {
+      width: 32,
+
+      height: 32,
+
+      marginRight: 9,
+
+      borderRadius: 10,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    recentSearchText: {
+      flex: 1,
+
+      fontSize: 13,
+
+      color: '#374151',
+    },
+
+    removeRecentButton: {
+      width: 36,
+
+      height: 42,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
     },
 
     // ------------------------------------------------------
@@ -3214,6 +4680,459 @@ const styles =
       fontWeight: '700',
 
       color: '#FFFFFF',
+    },
+
+    // ------------------------------------------------------
+    // GUIDES / PEOPLE
+    // ------------------------------------------------------
+
+    socialSectionHeader: {
+      marginBottom: 17,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'flex-start',
+
+      justifyContent:
+        'space-between',
+    },
+
+    socialCountBadge: {
+      minWidth: 32,
+
+      height: 32,
+
+      paddingHorizontal: 8,
+
+      borderRadius: 16,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    socialCountText: {
+      fontSize: 12,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    // GUIDE CARD
+
+    guideCard: {
+      marginBottom: 18,
+
+      overflow:
+        'hidden',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 20,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity: 0.04,
+
+      shadowRadius: 8,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 2,
+    },
+
+    guideCreatorRow: {
+      minHeight: 67,
+
+      paddingHorizontal:
+        14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    guideAvatar: {
+      width: 40,
+
+      height: 40,
+
+      borderRadius: 20,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#DCEBFF',
+    },
+
+    guideAvatarText: {
+      fontSize: 13,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    guideCreatorInfo: {
+      flex: 1,
+
+      marginLeft: 10,
+    },
+
+    guideCreatorName: {
+      fontSize: 13,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    guideCreatorUsername: {
+      marginTop: 2,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    publishedBadge: {
+      paddingHorizontal: 9,
+
+      paddingVertical: 5,
+
+      borderRadius: 15,
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    publishedBadgeText: {
+      fontSize: 9,
+
+      fontWeight: '800',
+
+      letterSpacing: 0.5,
+
+      color: '#1769E8',
+    },
+
+    guideImage: {
+      width: '100%',
+
+      height: 190,
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    guideImagePlaceholder: {
+      width: '100%',
+
+      height: 170,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
+    guideContent: {
+      padding: 15,
+    },
+
+    guideTitle: {
+      fontSize: 20,
+
+      fontWeight: '800',
+
+      color: '#111827',
+
+      letterSpacing: -0.3,
+    },
+
+    guideLocationRow: {
+      marginTop: 7,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    guideLocation: {
+      flex: 1,
+
+      marginLeft: 5,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    guideCaption: {
+      marginTop: 11,
+
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      color: '#4B5563',
+    },
+
+    guideMetaRow: {
+      marginTop: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      gap: 14,
+    },
+
+    guideMetaItem: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      gap: 5,
+    },
+
+    guideMetaText: {
+      fontSize: 11,
+
+      fontWeight: '600',
+
+      color: '#6B7280',
+    },
+
+    guideFooter: {
+      marginTop: 15,
+
+      paddingTop: 13,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      borderTopWidth: 1,
+
+      borderTopColor:
+        '#F0F1F3',
+    },
+
+    guideFooterText: {
+      fontSize: 10,
+
+      color: '#9CA3AF',
+    },
+
+    guideViewHint: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      gap: 5,
+    },
+
+    guideViewHintText: {
+      fontSize: 11,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    // TRAVELLER CARD
+
+    travellerCard: {
+      minHeight: 96,
+
+      marginBottom: 12,
+
+      padding: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 18,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    travellerCardPressed: {
+      opacity: 0.72,
+
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+
+    travellerAvatar: {
+      width: 56,
+
+      height: 56,
+
+      borderRadius: 28,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#DCEBFF',
+    },
+
+    travellerAvatarText: {
+      fontSize: 17,
+
+      fontWeight: '800',
+
+      color: '#1769E8',
+    },
+
+    travellerContent: {
+      flex: 1,
+
+      marginLeft: 13,
+    },
+
+    travellerName: {
+      fontSize: 15,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    travellerUsername: {
+      marginTop: 2,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    travellerMetaRow: {
+      marginTop: 8,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    travellerGuideCount: {
+      marginLeft: 5,
+
+      fontSize: 11,
+
+      fontWeight: '700',
+
+      color: '#1769E8',
+    },
+
+    travellerDot: {
+      marginHorizontal: 7,
+
+      fontSize: 11,
+
+      color: '#CBD5E1',
+    },
+
+    travellerDestination: {
+      flex: 1,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    travellerAction: {
+      width: 36,
+
+      height: 36,
+
+      marginLeft: 8,
+
+      borderRadius: 12,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F5F8FF',
+    },
+
+    socialLoading: {
+      alignItems:
+        'center',
+
+      paddingTop: 65,
+    },
+
+    socialLoadingText: {
+      marginTop: 8,
+
+      fontSize: 12,
+
+      color: '#6B7280',
     },
 
     // ------------------------------------------------------
