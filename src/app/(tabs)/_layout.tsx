@@ -1,27 +1,42 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { router } from 'expo-router';
 import {
-  Pressable,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from 'expo-router';
+
+import {
   StyleSheet,
-  Text,
   View,
   useColorScheme,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { StatusBar } from 'expo-status-bar';
 
 import AppTabs from '@/components/app-tabs';
 
 export default function TabsLayout() {
-  const colorScheme = useColorScheme();
-  const insets = useSafeAreaInsets();
+  const colorScheme =
+    useColorScheme();
 
   return (
     <ThemeProvider
-      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+      value={
+        colorScheme === 'dark'
+          ? DarkTheme
+          : DefaultTheme
+      }
     >
       <View style={styles.container}>
-        <AppTabs />
+        <StatusBar
+          hidden={false}
+          style={
+            colorScheme === 'dark'
+              ? 'light'
+              : 'dark'
+          }
+        />
 
+        <AppTabs />
       </View>
     </ThemeProvider>
   );
@@ -30,12 +45,6 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-
-  plus: {
-    color: '#FFFFFF',
-    fontSize: 36,
-    fontWeight: '300',
-    lineHeight: 39,
+    backgroundColor: '#FFFFFF',
   },
 });

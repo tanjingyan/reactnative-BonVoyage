@@ -22,6 +22,7 @@ function RootNavigator() {
         <Stack.Screen name="trip/[id]/add-activity" />
         <Stack.Screen name="trip/[id]/activity/[activityId]" />
         <Stack.Screen name="trip/[id]/map" />
+        <Stack.Screen name="create-guide" />
       </Stack.Protected>
     </Stack>
   );

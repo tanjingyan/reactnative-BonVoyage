@@ -1,8 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+
 import {
   httpsCallable,
 } from 'firebase/functions';
+
+import {
+  addDoc,
+  collection,
+  getDocs,
+  query as firestoreQuery,
+  serverTimestamp,
+  where,
+} from 'firebase/firestore';
 
 import {
   useState,
@@ -12,7 +25,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +42,8 @@ import {
 } from 'react-native-safe-area-context';
 
 import {
+  auth,
+  db,
   functions,
 } from '@/firebase/firebaseConfig';
 
@@ -85,6 +103,15 @@ type SearchPlacesResponse = {
   places: GooglePlace[];
 };
 
+type TripOption = {
+  id: string;
+  userId: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+};
+
 // ==========================================================
 // SCREEN
 // ==========================================================
@@ -121,6 +148,92 @@ export default function ExploreScreen() {
   const [
     hasSearched,
     setHasSearched,
+  ] =
+    useState(false);
+
+  // ========================================================
+  // ADD PLACE TO TRIP
+  // ========================================================
+
+  const [
+    addModalVisible,
+    setAddModalVisible,
+  ] =
+    useState(false);
+
+  const [
+    selectedPlace,
+    setSelectedPlace,
+  ] =
+    useState<GooglePlace | null>(
+      null
+    );
+
+  const [
+    userTrips,
+    setUserTrips,
+  ] =
+    useState<TripOption[]>([]);
+
+  const [
+    tripsLoading,
+    setTripsLoading,
+  ] =
+    useState(false);
+
+  const [
+    selectedTripId,
+    setSelectedTripId,
+  ] =
+    useState('');
+
+  const [
+    activityDate,
+    setActivityDate,
+  ] =
+    useState(
+      new Date()
+    );
+
+  const [
+    activityTime,
+    setActivityTime,
+  ] =
+    useState(() => {
+      const defaultTime =
+        new Date();
+
+      defaultTime.setHours(
+        10,
+        0,
+        0,
+        0
+      );
+
+      return defaultTime;
+    });
+
+  const [
+    activityNotes,
+    setActivityNotes,
+  ] =
+    useState('');
+
+  const [
+    showDatePicker,
+    setShowDatePicker,
+  ] =
+    useState(false);
+
+  const [
+    showTimePicker,
+    setShowTimePicker,
+  ] =
+    useState(false);
+
+  const [
+    addingToTrip,
+    setAddingToTrip,
   ] =
     useState(false);
 
@@ -273,6 +386,492 @@ export default function ExploreScreen() {
 
       Alert.alert(
         'Unable to open Google Maps'
+      );
+    }
+  }
+
+  // ========================================================
+  // OPEN ADD TO TRIP
+  // ========================================================
+
+  async function openAddToTrip(
+    place: GooglePlace
+  ) {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      Alert.alert(
+        'Login required',
+        'Please log in before adding a place to a trip.'
+      );
+
+      return;
+    }
+
+    setSelectedPlace(
+      place
+    );
+
+    setActivityNotes(
+      ''
+    );
+
+    setSelectedTripId(
+      ''
+    );
+
+    setShowDatePicker(
+      false
+    );
+
+    setShowTimePicker(
+      false
+    );
+
+    setAddModalVisible(
+      true
+    );
+
+    try {
+      setTripsLoading(
+        true
+      );
+
+      const tripsQuery =
+        firestoreQuery(
+          collection(
+            db,
+            'trips'
+          ),
+          where(
+            'userId',
+            '==',
+            user.uid
+          )
+        );
+
+      const snapshot =
+        await getDocs(
+          tripsQuery
+        );
+
+      const tripList:
+        TripOption[] =
+        snapshot.docs.map(
+          tripDocument => ({
+            id:
+              tripDocument.id,
+
+            ...(tripDocument.data() as Omit<
+              TripOption,
+              'id'
+            >),
+          })
+        );
+
+      tripList.sort(
+        (a, b) =>
+          parseStoredDate(
+            a.startDate
+          ).getTime() -
+          parseStoredDate(
+            b.startDate
+          ).getTime()
+      );
+
+      setUserTrips(
+        tripList
+      );
+
+      if (
+        tripList.length >
+        0
+      ) {
+        const firstTrip =
+          tripList[0];
+
+        setSelectedTripId(
+          firstTrip.id
+        );
+
+        setActivityDate(
+          parseStoredDate(
+            firstTrip.startDate
+          )
+        );
+      }
+    } catch (error) {
+      console.error(
+        'Load trips error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to load trips',
+        'BonVoyage could not load your trips. Please try again.'
+      );
+    } finally {
+      setTripsLoading(
+        false
+      );
+    }
+  }
+
+  // ========================================================
+  // CLOSE ADD TO TRIP
+  // ========================================================
+
+  function closeAddToTrip() {
+    if (addingToTrip) {
+      return;
+    }
+
+    setAddModalVisible(
+      false
+    );
+
+    setSelectedPlace(
+      null
+    );
+
+    setSelectedTripId(
+      ''
+    );
+
+    setActivityNotes(
+      ''
+    );
+
+    setShowDatePicker(
+      false
+    );
+
+    setShowTimePicker(
+      false
+    );
+  }
+
+  // ========================================================
+  // SELECT TRIP
+  // ========================================================
+
+  function selectTrip(
+    trip: TripOption
+  ) {
+    setSelectedTripId(
+      trip.id
+    );
+
+    /*
+      Start the activity on the first day of the selected trip.
+      The user can change it with the date picker.
+    */
+
+    setActivityDate(
+      parseStoredDate(
+        trip.startDate
+      )
+    );
+
+    setShowDatePicker(
+      false
+    );
+  }
+
+  // ========================================================
+  // DATE PICKER
+  // ========================================================
+
+  function handleDateChange(
+    event:
+      DateTimePickerEvent,
+    selectedDate?:
+      Date
+  ) {
+    if (
+      Platform.OS ===
+      'android'
+    ) {
+      setShowDatePicker(
+        false
+      );
+    }
+
+    if (
+      event.type ===
+        'dismissed' ||
+      !selectedDate
+    ) {
+      return;
+    }
+
+    const selectedTrip =
+      userTrips.find(
+        trip =>
+          trip.id ===
+          selectedTripId
+      );
+
+    if (
+      selectedTrip
+    ) {
+      const startDate =
+        startOfDay(
+          parseStoredDate(
+            selectedTrip.startDate
+          )
+        );
+
+      const endDate =
+        startOfDay(
+          parseStoredDate(
+            selectedTrip.endDate
+          )
+        );
+
+      const chosenDate =
+        startOfDay(
+          selectedDate
+        );
+
+      if (
+        chosenDate <
+          startDate ||
+        chosenDate >
+          endDate
+      ) {
+        Alert.alert(
+          'Date outside trip',
+          `Choose a date between ${formatDisplayDate(
+            startDate
+          )} and ${formatDisplayDate(
+            endDate
+          )}.`
+        );
+
+        return;
+      }
+    }
+
+    setActivityDate(
+      selectedDate
+    );
+  }
+
+  // ========================================================
+  // TIME PICKER
+  // ========================================================
+
+  function handleTimeChange(
+    event:
+      DateTimePickerEvent,
+    selectedTime?:
+      Date
+  ) {
+    if (
+      Platform.OS ===
+      'android'
+    ) {
+      setShowTimePicker(
+        false
+      );
+    }
+
+    if (
+      event.type ===
+        'dismissed' ||
+      !selectedTime
+    ) {
+      return;
+    }
+
+    setActivityTime(
+      selectedTime
+    );
+  }
+
+  // ========================================================
+  // SAVE PLACE AS ACTIVITY
+  // ========================================================
+
+  async function addPlaceToTrip() {
+    const user =
+      auth.currentUser;
+
+    if (
+      !user ||
+      !selectedPlace
+    ) {
+      return;
+    }
+
+    if (
+      !selectedTripId
+    ) {
+      Alert.alert(
+        'Choose a trip',
+        'Please select the trip you want to add this place to.'
+      );
+
+      return;
+    }
+
+    const selectedTrip =
+      userTrips.find(
+        trip =>
+          trip.id ===
+          selectedTripId
+      );
+
+    if (!selectedTrip) {
+      Alert.alert(
+        'Trip unavailable',
+        'The selected trip could not be found.'
+      );
+
+      return;
+    }
+
+    const startDate =
+      startOfDay(
+        parseStoredDate(
+          selectedTrip.startDate
+        )
+      );
+
+    const endDate =
+      startOfDay(
+        parseStoredDate(
+          selectedTrip.endDate
+        )
+      );
+
+    const chosenDate =
+      startOfDay(
+        activityDate
+      );
+
+    if (
+      chosenDate <
+        startDate ||
+      chosenDate >
+        endDate
+    ) {
+      Alert.alert(
+        'Date outside trip',
+        `Choose a date between ${formatDisplayDate(
+          startDate
+        )} and ${formatDisplayDate(
+          endDate
+        )}.`
+      );
+
+      return;
+    }
+
+    try {
+      setAddingToTrip(
+        true
+      );
+
+      await addDoc(
+        collection(
+          db,
+          'trips',
+          selectedTrip.id,
+          'activities'
+        ),
+        {
+          userId:
+            user.uid,
+
+          name:
+            selectedPlace.displayName,
+
+          /*
+            Your current itinerary and map screens already read
+            the activity "location" field, so the Google address
+            is saved directly into that same field.
+          */
+          location:
+            selectedPlace.formattedAddress ||
+            selectedPlace.displayName,
+
+          date:
+            formatFirestoreDate(
+              activityDate
+            ),
+
+          time:
+            formatFirestoreTime(
+              activityTime
+            ),
+
+          notes:
+            activityNotes.trim(),
+
+          createdAt:
+            serverTimestamp(),
+
+          /*
+            Extra Google Places information is useful later
+            for place details without changing the existing
+            itinerary structure.
+          */
+          source:
+            'google_places',
+
+          googlePlaceId:
+            selectedPlace.id,
+
+          latitude:
+            selectedPlace.latitude,
+
+          longitude:
+            selectedPlace.longitude,
+
+          googleMapsUri:
+            selectedPlace.googleMapsUri,
+
+          photoUri:
+            selectedPlace.photoUri,
+        }
+      );
+
+      setAddModalVisible(
+        false
+      );
+
+      setSelectedPlace(
+        null
+      );
+
+      setSelectedTripId(
+        ''
+      );
+
+      setActivityNotes(
+        ''
+      );
+
+      Alert.alert(
+        'Added to itinerary',
+        `${selectedPlace.displayName} was added to ${selectedTrip.title}.`
+      );
+    } catch (error) {
+      console.error(
+        'Add place to trip error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to add place',
+        'BonVoyage could not add this place to your itinerary. Please try again.'
+      );
+    } finally {
+      setAddingToTrip(
+        false
       );
     }
   }
@@ -497,6 +1096,9 @@ export default function ExploreScreen() {
                   onOpenGoogleMaps={
                     openGoogleMaps
                   }
+                  onAddToTrip={
+                    openAddToTrip
+                  }
                 />
               ) : (
                 <PlacesSection
@@ -526,6 +1128,582 @@ export default function ExploreScreen() {
             <PeopleSection />
           )}
         </ScrollView>
+
+        {/* ================================================= */}
+        {/* ADD TO TRIP MODAL                                 */}
+        {/* ================================================= */}
+
+        <Modal
+          visible={
+            addModalVisible
+          }
+          transparent
+          animationType="slide"
+          onRequestClose={
+            closeAddToTrip
+          }
+        >
+          <KeyboardAvoidingView
+            style={
+              styles.modalKeyboardView
+            }
+            behavior={
+              Platform.OS ===
+              'ios'
+                ? 'padding'
+                : undefined
+            }
+          >
+            <Pressable
+              style={
+                styles.modalBackdrop
+              }
+              onPress={
+                closeAddToTrip
+              }
+            />
+
+            <View
+              style={
+                styles.modalSheet
+              }
+            >
+              <View
+                style={
+                  styles.modalDragBar
+                }
+              />
+
+              <View
+                style={
+                  styles.modalHeader
+                }
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.modalTitle
+                    }
+                  >
+                    Add to trip
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.modalSubtitle
+                    }
+                  >
+                    Add this place to your itinerary
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={
+                    styles.modalCloseButton
+                  }
+                  onPress={
+                    closeAddToTrip
+                  }
+                >
+                  <Ionicons
+                    name="close"
+                    size={22}
+                    color="#374151"
+                  />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                style={
+                  styles.modalScroll
+                }
+                contentContainerStyle={
+                  styles.modalScrollContent
+                }
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={
+                  false
+                }
+              >
+                {/* SELECTED PLACE */}
+
+                {selectedPlace ? (
+                  <View
+                    style={
+                      styles.selectedPlaceCard
+                    }
+                  >
+                    {selectedPlace.photoUri ? (
+                      <Image
+                        source={{
+                          uri:
+                            selectedPlace.photoUri,
+                        }}
+                        style={
+                          styles.selectedPlaceImage
+                        }
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.selectedPlacePlaceholder
+                        }
+                      >
+                        <Ionicons
+                          name="location"
+                          size={24}
+                          color="#1769E8"
+                        />
+                      </View>
+                    )}
+
+                    <View
+                      style={
+                        styles.selectedPlaceInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.selectedPlaceName
+                        }
+                        numberOfLines={2}
+                      >
+                        {
+                          selectedPlace.displayName
+                        }
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.selectedPlaceAddress
+                        }
+                        numberOfLines={2}
+                      >
+                        {selectedPlace.formattedAddress ||
+                          'Google Places location'}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* CHOOSE TRIP */}
+
+                <Text
+                  style={
+                    styles.modalFieldLabel
+                  }
+                >
+                  Choose trip
+                </Text>
+
+                {tripsLoading ? (
+                  <View
+                    style={
+                      styles.tripLoadingBox
+                    }
+                  >
+                    <ActivityIndicator
+                      color="#1769E8"
+                    />
+
+                    <Text
+                      style={
+                        styles.tripLoadingText
+                      }
+                    >
+                      Loading your trips...
+                    </Text>
+                  </View>
+                ) : userTrips.length ===
+                  0 ? (
+                  <View
+                    style={
+                      styles.noTripsCard
+                    }
+                  >
+                    <Ionicons
+                      name="airplane-outline"
+                      size={28}
+                      color="#1769E8"
+                    />
+
+                    <Text
+                      style={
+                        styles.noTripsTitle
+                      }
+                    >
+                      No trips yet
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.noTripsText
+                      }
+                    >
+                      Create a trip first, then come back to Explore to add places.
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={
+                      styles.tripOptions
+                    }
+                  >
+                    {userTrips.map(
+                      trip => {
+                        const selected =
+                          selectedTripId ===
+                          trip.id;
+
+                        return (
+                          <Pressable
+                            key={
+                              trip.id
+                            }
+                            style={[
+                              styles.tripOption,
+                              selected &&
+                                styles.tripOptionSelected,
+                            ]}
+                            onPress={() =>
+                              selectTrip(
+                                trip
+                              )
+                            }
+                          >
+                            <View
+                              style={[
+                                styles.tripRadio,
+                                selected &&
+                                  styles.tripRadioSelected,
+                              ]}
+                            >
+                              {selected ? (
+                                <View
+                                  style={
+                                    styles.tripRadioDot
+                                  }
+                                />
+                              ) : null}
+                            </View>
+
+                            <View
+                              style={
+                                styles.tripOptionInfo
+                              }
+                            >
+                              <Text
+                                style={
+                                  styles.tripOptionTitle
+                                }
+                              >
+                                {
+                                  trip.title
+                                }
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.tripOptionDestination
+                                }
+                              >
+                                {
+                                  trip.destination
+                                }
+                              </Text>
+
+                              <Text
+                                style={
+                                  styles.tripOptionDates
+                                }
+                              >
+                                {formatDisplayDate(
+                                  parseStoredDate(
+                                    trip.startDate
+                                  )
+                                )}
+                                {'  →  '}
+                                {formatDisplayDate(
+                                  parseStoredDate(
+                                    trip.endDate
+                                  )
+                                )}
+                              </Text>
+                            </View>
+
+                            {selected ? (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={22}
+                                color="#1769E8"
+                              />
+                            ) : null}
+                          </Pressable>
+                        );
+                      }
+                    )}
+                  </View>
+                )}
+
+                {/* DATE / TIME */}
+
+                {userTrips.length >
+                0 ? (
+                  <>
+                    <View
+                      style={
+                        styles.dateTimeRow
+                      }
+                    >
+                      <View
+                        style={
+                          styles.dateTimeColumn
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.modalFieldLabel
+                          }
+                        >
+                          Date
+                        </Text>
+
+                        <Pressable
+                          style={
+                            styles.dateTimeButton
+                          }
+                          onPress={() => {
+                            setShowTimePicker(
+                              false
+                            );
+
+                            setShowDatePicker(
+                              true
+                            );
+                          }}
+                        >
+                          <Ionicons
+                            name="calendar-outline"
+                            size={19}
+                            color="#1769E8"
+                          />
+
+                          <Text
+                            style={
+                              styles.dateTimeText
+                            }
+                          >
+                            {formatDisplayDate(
+                              activityDate
+                            )}
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <View
+                        style={
+                          styles.dateTimeColumn
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.modalFieldLabel
+                          }
+                        >
+                          Time
+                        </Text>
+
+                        <Pressable
+                          style={
+                            styles.dateTimeButton
+                          }
+                          onPress={() => {
+                            setShowDatePicker(
+                              false
+                            );
+
+                            setShowTimePicker(
+                              true
+                            );
+                          }}
+                        >
+                          <Ionicons
+                            name="time-outline"
+                            size={19}
+                            color="#1769E8"
+                          />
+
+                          <Text
+                            style={
+                              styles.dateTimeText
+                            }
+                          >
+                            {formatDisplayTime(
+                              activityTime
+                            )}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+
+                    {showDatePicker ? (
+                      <DateTimePicker
+                        value={
+                          activityDate
+                        }
+                        mode="date"
+                        display={
+                          Platform.OS ===
+                          'ios'
+                            ? 'spinner'
+                            : 'default'
+                        }
+                        minimumDate={
+                          getSelectedTripDateRange(
+                            userTrips,
+                            selectedTripId
+                          ).minimumDate
+                        }
+                        maximumDate={
+                          getSelectedTripDateRange(
+                            userTrips,
+                            selectedTripId
+                          ).maximumDate
+                        }
+                        onChange={
+                          handleDateChange
+                        }
+                      />
+                    ) : null}
+
+                    {showTimePicker ? (
+                      <DateTimePicker
+                        value={
+                          activityTime
+                        }
+                        mode="time"
+                        display={
+                          Platform.OS ===
+                          'ios'
+                            ? 'spinner'
+                            : 'default'
+                        }
+                        onChange={
+                          handleTimeChange
+                        }
+                      />
+                    ) : null}
+
+                    {/* NOTES */}
+
+                    <Text
+                      style={[
+                        styles.modalFieldLabel,
+                        styles.notesLabel,
+                      ]}
+                    >
+                      Notes
+                      <Text
+                        style={
+                          styles.optionalText
+                        }
+                      >
+                        {' '}
+                        (optional)
+                      </Text>
+                    </Text>
+
+                    <TextInput
+                      style={
+                        styles.notesInput
+                      }
+                      value={
+                        activityNotes
+                      }
+                      onChangeText={
+                        setActivityNotes
+                      }
+                      placeholder="Add a reminder or plan for this place..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      textAlignVertical="top"
+                    />
+                  </>
+                ) : null}
+              </ScrollView>
+
+              {/* ACTIONS */}
+
+              <View
+                style={
+                  styles.modalActions
+                }
+              >
+                <Pressable
+                  style={
+                    styles.cancelModalButton
+                  }
+                  onPress={
+                    closeAddToTrip
+                  }
+                  disabled={
+                    addingToTrip
+                  }
+                >
+                  <Text
+                    style={
+                      styles.cancelModalText
+                    }
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.confirmAddButton,
+                    (
+                      !selectedTripId ||
+                      addingToTrip
+                    ) &&
+                      styles.confirmAddButtonDisabled,
+                  ]}
+                  onPress={() =>
+                    void addPlaceToTrip()
+                  }
+                  disabled={
+                    !selectedTripId ||
+                    addingToTrip
+                  }
+                >
+                  {addingToTrip ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="add"
+                        size={19}
+                        color="#FFFFFF"
+                      />
+
+                      <Text
+                        style={
+                          styles.confirmAddText
+                        }
+                      >
+                        Add to itinerary
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -766,11 +1944,18 @@ type SearchResultsProps = {
       place:
         GooglePlace
     ) => void;
+
+  onAddToTrip:
+    (
+      place:
+        GooglePlace
+    ) => void;
 };
 
 function SearchResults({
   places,
   onOpenGoogleMaps,
+  onAddToTrip,
 }: SearchResultsProps) {
   if (
     places.length ===
@@ -861,6 +2046,11 @@ function SearchResults({
                 place
               )
             }
+            onAddToTrip={() =>
+              onAddToTrip(
+                place
+              )
+            }
           />
         )
       )}
@@ -878,11 +2068,15 @@ type PlaceCardProps = {
 
   onOpenGoogleMaps:
     () => void;
+
+  onAddToTrip:
+    () => void;
 };
 
 function PlaceCard({
   place,
   onOpenGoogleMaps,
+  onAddToTrip,
 }: PlaceCardProps) {
   return (
     <View
@@ -1046,27 +2240,28 @@ function PlaceCard({
             </Text>
           </Pressable>
 
-          {/* We will connect this next */}
-
-          <View
+          <Pressable
             style={
-              styles.futureAddButton
+              styles.addToTripButton
+            }
+            onPress={
+              onAddToTrip
             }
           >
             <Ionicons
               name="add"
               size={17}
-              color="#9CA3AF"
+              color="#FFFFFF"
             />
 
             <Text
               style={
-                styles.futureAddText
+                styles.addToTripText
               }
             >
               Add to trip
             </Text>
-          </View>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -1258,6 +2453,169 @@ function formatPlaceType(
       character =>
         character.toUpperCase()
     );
+}
+
+// ==========================================================
+// DATE HELPERS
+// ==========================================================
+
+function parseStoredDate(
+  value: string
+) {
+  /*
+    Trips are currently stored as ISO strings.
+    This also supports a future YYYY-MM-DD value.
+  */
+
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(
+      value
+    )
+  ) {
+    const [
+      year,
+      month,
+      day,
+    ] =
+      value
+        .split('-')
+        .map(Number);
+
+    return new Date(
+      year,
+      month - 1,
+      day
+    );
+  }
+
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    return new Date();
+  }
+
+  return parsed;
+}
+
+function startOfDay(
+  date: Date
+) {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+}
+
+function formatFirestoreDate(
+  date: Date
+) {
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() +
+        1
+    ).padStart(
+      2,
+      '0'
+    );
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(
+      2,
+      '0'
+    );
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatFirestoreTime(
+  date: Date
+) {
+  const hours =
+    String(
+      date.getHours()
+    ).padStart(
+      2,
+      '0'
+    );
+
+  const minutes =
+    String(
+      date.getMinutes()
+    ).padStart(
+      2,
+      '0'
+    );
+
+  return `${hours}:${minutes}`;
+}
+
+function formatDisplayDate(
+  date: Date
+) {
+  return date.toLocaleDateString(
+    'en-GB',
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }
+  );
+}
+
+function formatDisplayTime(
+  date: Date
+) {
+  return date.toLocaleTimeString(
+    'en-US',
+    {
+      hour: 'numeric',
+      minute: '2-digit',
+    }
+  );
+}
+
+function getSelectedTripDateRange(
+  trips: TripOption[],
+  selectedTripId: string
+) {
+  const selectedTrip =
+    trips.find(
+      trip =>
+        trip.id ===
+        selectedTripId
+    );
+
+  if (!selectedTrip) {
+    return {
+      minimumDate:
+        undefined,
+      maximumDate:
+        undefined,
+    };
+  }
+
+  return {
+    minimumDate:
+      parseStoredDate(
+        selectedTrip.startDate
+      ),
+
+    maximumDate:
+      parseStoredDate(
+        selectedTrip.endDate
+      ),
+  };
 }
 
 // ==========================================================
@@ -1830,7 +3188,7 @@ const styles =
       color: '#1769E8',
     },
 
-    futureAddButton: {
+    addToTripButton: {
       flexDirection:
         'row',
 
@@ -1847,15 +3205,561 @@ const styles =
       borderRadius: 12,
 
       backgroundColor:
+        '#1769E8',
+    },
+
+    addToTripText: {
+      fontSize: 12,
+
+      fontWeight: '700',
+
+      color: '#FFFFFF',
+    },
+
+    // ------------------------------------------------------
+    // ADD TO TRIP MODAL
+    // ------------------------------------------------------
+
+    modalKeyboardView: {
+      flex: 1,
+
+      justifyContent:
+        'flex-end',
+    },
+
+    modalBackdrop: {
+      position: 'absolute',
+
+      top: 0,
+
+      left: 0,
+
+      right: 0,
+
+      bottom: 0,
+
+      backgroundColor:
+        'rgba(17, 24, 39, 0.42)',
+    },
+
+    modalSheet: {
+      maxHeight:
+        '88%',
+
+      borderTopLeftRadius:
+        28,
+
+      borderTopRightRadius:
+        28,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      overflow:
+        'hidden',
+    },
+
+    modalDragBar: {
+      width: 42,
+
+      height: 4,
+
+      marginTop: 10,
+
+      marginBottom: 8,
+
+      alignSelf:
+        'center',
+
+      borderRadius: 4,
+
+      backgroundColor:
+        '#D1D5DB',
+    },
+
+    modalHeader: {
+      paddingHorizontal:
+        20,
+
+      paddingTop: 5,
+
+      paddingBottom: 15,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        '#F0F1F3',
+    },
+
+    modalTitle: {
+      fontSize: 22,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    modalSubtitle: {
+      marginTop: 3,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    modalCloseButton: {
+      width: 38,
+
+      height: 38,
+
+      borderRadius: 19,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
         '#F3F4F6',
     },
 
-    futureAddText: {
+    modalScroll: {
+      flexGrow: 0,
+    },
+
+    modalScrollContent: {
+      paddingHorizontal:
+        20,
+
+      paddingTop: 17,
+
+      paddingBottom: 25,
+    },
+
+    selectedPlaceCard: {
+      padding: 11,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 17,
+
+      backgroundColor:
+        '#F9FAFB',
+    },
+
+    selectedPlaceImage: {
+      width: 66,
+
+      height: 66,
+
+      borderRadius: 13,
+
+      backgroundColor:
+        '#E5E7EB',
+    },
+
+    selectedPlacePlaceholder: {
+      width: 66,
+
+      height: 66,
+
+      borderRadius: 13,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    selectedPlaceInfo: {
+      flex: 1,
+
+      marginLeft: 12,
+    },
+
+    selectedPlaceName: {
+      fontSize: 16,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    selectedPlaceAddress: {
+      marginTop: 4,
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      color: '#6B7280',
+    },
+
+    modalFieldLabel: {
+      marginTop: 20,
+
+      marginBottom: 8,
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#374151',
+    },
+
+    tripLoadingBox: {
+      minHeight: 80,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius: 15,
+
+      backgroundColor:
+        '#F9FAFB',
+    },
+
+    tripLoadingText: {
+      marginLeft: 9,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    noTripsCard: {
+      paddingVertical:
+        22,
+
+      paddingHorizontal:
+        20,
+
+      alignItems:
+        'center',
+
+      borderRadius: 17,
+
+      backgroundColor:
+        '#F5F8FF',
+    },
+
+    noTripsTitle: {
+      marginTop: 8,
+
+      fontSize: 15,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    noTripsText: {
+      marginTop: 5,
+
+      textAlign:
+        'center',
+
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      color: '#6B7280',
+    },
+
+    tripOptions: {
+      gap: 9,
+    },
+
+    tripOption: {
+      padding: 13,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 15,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    tripOptionSelected: {
+      borderColor:
+        '#1769E8',
+
+      backgroundColor:
+        '#F5F8FF',
+    },
+
+    tripRadio: {
+      width: 20,
+
+      height: 20,
+
+      marginRight: 11,
+
+      borderWidth: 2,
+
+      borderColor:
+        '#CBD5E1',
+
+      borderRadius: 10,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    tripRadioSelected: {
+      borderColor:
+        '#1769E8',
+    },
+
+    tripRadioDot: {
+      width: 10,
+
+      height: 10,
+
+      borderRadius: 5,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    tripOptionInfo: {
+      flex: 1,
+    },
+
+    tripOptionTitle: {
+      fontSize: 14,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    tripOptionDestination: {
+      marginTop: 2,
+
+      fontSize: 12,
+
+      color: '#4B5563',
+    },
+
+    tripOptionDates: {
+      marginTop: 4,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    dateTimeRow: {
+      flexDirection:
+        'row',
+
+      gap: 10,
+    },
+
+    dateTimeColumn: {
+      flex: 1,
+    },
+
+    dateTimeButton: {
+      minHeight: 50,
+
+      paddingHorizontal:
+        12,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#F9FAFB',
+    },
+
+    dateTimeText: {
+      marginLeft: 7,
+
       fontSize: 12,
 
       fontWeight: '600',
 
+      color: '#374151',
+    },
+
+    notesLabel: {
+      marginTop: 18,
+    },
+
+    optionalText: {
+      fontWeight: '400',
+
       color: '#9CA3AF',
+    },
+
+    notesInput: {
+      minHeight: 88,
+
+      paddingHorizontal:
+        13,
+
+      paddingVertical: 12,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 14,
+
+      fontSize: 13,
+
+      lineHeight: 19,
+
+      color: '#111827',
+
+      backgroundColor:
+        '#F9FAFB',
+    },
+
+    modalActions: {
+      paddingHorizontal:
+        20,
+
+      paddingTop: 12,
+
+      paddingBottom:
+        Platform.OS ===
+        'ios'
+          ? 28
+          : 18,
+
+      flexDirection:
+        'row',
+
+      gap: 10,
+
+      borderTopWidth: 1,
+
+      borderTopColor:
+        '#F0F1F3',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    cancelModalButton: {
+      minHeight: 50,
+
+      paddingHorizontal:
+        20,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    cancelModalText: {
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#374151',
+    },
+
+    confirmAddButton: {
+      flex: 1,
+
+      minHeight: 50,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      gap: 6,
+
+      borderRadius: 14,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    confirmAddButtonDisabled: {
+      opacity: 0.45,
+    },
+
+    confirmAddText: {
+      fontSize: 13,
+
+      fontWeight: '800',
+
+      color: '#FFFFFF',
     },
 
     // ------------------------------------------------------

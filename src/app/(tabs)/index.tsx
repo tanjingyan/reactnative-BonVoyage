@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Alert,
   Image,
   ImageBackground,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -95,6 +97,11 @@ export default function HomeScreen() {
   const [
     activitiesLoading,
     setActivitiesLoading,
+  ] = useState(false);
+
+  const [
+    createMenuVisible,
+    setCreateMenuVisible,
   ] = useState(false);
 
   const user = auth.currentUser;
@@ -947,45 +954,6 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          <Pressable
-            style={
-              styles.quickAction
-            }
-            onPress={() =>
-              router.push(
-                '/explore'
-              )
-            }
-          >
-            <View
-              style={[
-                styles.quickIcon,
-                styles.greenIcon,
-              ]}
-            >
-              <Ionicons
-                name="compass-outline"
-                size={25}
-                color="#059669"
-              />
-            </View>
-
-            <Text
-              style={
-                styles.quickTitle
-              }
-            >
-              Explore
-            </Text>
-
-            <Text
-              style={
-                styles.quickDescription
-              }
-            >
-              Discover places
-            </Text>
-          </Pressable>
         </View>
 
         {/* TRAVEL INSPIRATION */}
@@ -1179,9 +1147,8 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* =====================================================
-          FLOATING CREATE TRIP BUTTON
-          Only appears on the Home / index tab because it is
-          rendered directly inside this screen.
+          FLOATING CREATE BUTTON
+          Opens the BonVoyage creation menu.
       ====================================================== */}
 
       <Pressable
@@ -1189,12 +1156,12 @@ export default function HomeScreen() {
           styles.floatingCreateButton
         }
         onPress={() =>
-          router.push(
-            '/create-trip'
+          setCreateMenuVisible(
+            true
           )
         }
         accessibilityRole="button"
-        accessibilityLabel="Create a new trip"
+        accessibilityLabel="Create"
       >
         <Ionicons
           name="add"
@@ -1202,6 +1169,240 @@ export default function HomeScreen() {
           color="#FFFFFF"
         />
       </Pressable>
+
+      {/* =====================================================
+          CREATE MENU
+      ====================================================== */}
+
+      <Modal
+        visible={
+          createMenuVisible
+        }
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() =>
+          setCreateMenuVisible(
+            false
+          )
+        }
+      >
+        <View
+          style={
+            styles.createMenuBackdrop
+          }
+        >
+          {/* Decorative soft background shapes */}
+
+          <View
+            style={
+              styles.createMenuGlowTop
+            }
+          />
+
+          <View
+            style={
+              styles.createMenuGlowBottom
+            }
+          />
+
+          <SafeAreaView
+            style={
+              styles.createMenuSafeArea
+            }
+          >
+            {/* CLOSE BUTTON */}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.createMenuCloseButton,
+
+                pressed &&
+                  styles.createMenuPressed,
+              ]}
+              onPress={() =>
+                setCreateMenuVisible(
+                  false
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Close create menu"
+            >
+              <Ionicons
+                name="close"
+                size={27}
+                color="#111827"
+              />
+            </Pressable>
+
+            {/* CREATE OPTIONS */}
+
+            <View
+              style={
+                styles.createMenuContent
+              }
+            >
+              <Text
+                style={
+                  styles.createMenuHeading
+                }
+              >
+                What would you like to create?
+              </Text>
+
+              <Text
+                style={
+                  styles.createMenuSubheading
+                }
+              >
+                Plan, share and remember your travels.
+              </Text>
+
+              {/* PLAN TRIP */}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.createMenuCard,
+
+                  pressed &&
+                    styles.createMenuPressed,
+                ]}
+                onPress={() => {
+                  setCreateMenuVisible(
+                    false
+                  );
+
+                  setTimeout(
+                    () => {
+                      router.push(
+                        '/create-trip'
+                      );
+                    },
+                    120
+                  );
+                }}
+              >
+                <View
+                  style={
+                    styles.createMenuEmojiWrap
+                  }
+                >
+                  <Text
+                    style={
+                      styles.createMenuEmoji
+                    }
+                  >
+                    🧳
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.createMenuCardContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.createMenuCardTitle
+                    }
+                  >
+                    Plan your trip
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.createMenuCardDescription
+                    }
+                  >
+                    Choose places and build itineraries
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={21}
+                  color="#9CA3AF"
+                />
+              </Pressable>
+
+              {/* WRITE GUIDE */}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.createMenuCard,
+
+                  pressed &&
+                    styles.createMenuPressed,
+                ]}
+                onPress={() => {
+                  setCreateMenuVisible(
+                    false
+                  );
+
+                  setTimeout(
+                    () => {
+                      router.push(
+                        '/create-guide'
+                      );
+                    },
+                    120
+                  );
+                }}
+              >
+                <View
+                  style={
+                    styles.createMenuEmojiWrap
+                  }
+                >
+                  <Text
+                    style={
+                      styles.createMenuEmoji
+                    }
+                  >
+                    🧭
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.createMenuCardContent
+                  }
+                >
+                  <Text
+                    style={
+                      styles.createMenuCardTitle
+                    }
+                  >
+                    Write a travel guide
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.createMenuCardDescription
+                    }
+                  >
+                    Share tips and inspire others
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={21}
+                  color="#9CA3AF"
+                />
+              </Pressable>
+            </View>
+
+            <Text
+              style={
+                styles.createMenuFooter
+              }
+            >
+              BonVoyage
+            </Text>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1930,5 +2131,248 @@ const styles =
         width: 0,
         height: 4,
       },
+    },
+
+    // =======================================================
+    // CREATE MENU
+    // =======================================================
+
+    createMenuBackdrop: {
+      flex: 1,
+
+      overflow: 'hidden',
+
+      backgroundColor:
+        '#FFF4EF',
+    },
+
+    /*
+     * These two soft shapes imitate the peach / pink
+     * background from the reference without requiring
+     * another gradient package.
+     */
+    createMenuGlowTop: {
+      position: 'absolute',
+
+      top: 110,
+
+      right: -120,
+
+      width: 360,
+
+      height: 360,
+
+      borderRadius: 180,
+
+      backgroundColor:
+        '#FFE1D8',
+
+      opacity: 0.8,
+    },
+
+    createMenuGlowBottom: {
+      position: 'absolute',
+
+      bottom: 40,
+
+      left: -130,
+
+      width: 390,
+
+      height: 390,
+
+      borderRadius: 195,
+
+      backgroundColor:
+        '#FFD7CB',
+
+      opacity: 0.55,
+    },
+
+    createMenuSafeArea: {
+      flex: 1,
+
+      paddingHorizontal: 22,
+    },
+
+    createMenuCloseButton: {
+      width: 50,
+
+      height: 50,
+
+      marginTop: 12,
+
+      borderRadius: 25,
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        'rgba(255,255,255,0.88)',
+
+      borderWidth: 1,
+
+      borderColor:
+        'rgba(255,255,255,0.95)',
+
+      shadowColor: '#000',
+
+      shadowOpacity: 0.05,
+
+      shadowRadius: 8,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 2,
+    },
+
+    createMenuContent: {
+      flex: 1,
+
+      justifyContent:
+        'center',
+
+      paddingBottom: 45,
+    },
+
+    createMenuHeading: {
+      color: '#111827',
+
+      fontSize: 27,
+
+      fontWeight: '800',
+
+      letterSpacing: -0.6,
+
+      textAlign: 'center',
+    },
+
+    createMenuSubheading: {
+      marginTop: 6,
+
+      marginBottom: 25,
+
+      color: '#6B7280',
+
+      fontSize: 13,
+
+      lineHeight: 19,
+
+      textAlign: 'center',
+    },
+
+    createMenuCard: {
+      minHeight: 112,
+
+      marginBottom: 15,
+
+      paddingHorizontal: 18,
+
+      paddingVertical: 18,
+
+      borderRadius: 25,
+
+      borderWidth: 1.5,
+
+      borderColor:
+        'rgba(255,255,255,0.95)',
+
+      backgroundColor:
+        'rgba(255,255,255,0.82)',
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      shadowColor: '#000',
+
+      shadowOpacity: 0.035,
+
+      shadowRadius: 10,
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+
+      elevation: 2,
+    },
+
+    createMenuPressed: {
+      opacity: 0.72,
+
+      transform: [
+        {
+          scale: 0.985,
+        },
+      ],
+    },
+
+    createMenuEmojiWrap: {
+      width: 60,
+
+      height: 60,
+
+      marginRight: 14,
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+    },
+
+    createMenuEmoji: {
+      fontSize: 39,
+    },
+
+    createMenuCardContent: {
+      flex: 1,
+
+      paddingRight: 8,
+    },
+
+    createMenuCardTitle: {
+      color: '#111827',
+
+      fontSize: 20,
+
+      fontWeight: '800',
+
+      letterSpacing: -0.3,
+    },
+
+    createMenuCardDescription: {
+      marginTop: 5,
+
+      color: '#6B7280',
+
+      fontSize: 13,
+
+      lineHeight: 19,
+    },
+
+    createMenuFooter: {
+      position: 'absolute',
+
+      left: 0,
+
+      right: 0,
+
+      bottom: 16,
+
+      color: '#9CA3AF',
+
+      fontSize: 11,
+
+      fontWeight: '700',
+
+      letterSpacing: 0.8,
+
+      textAlign: 'center',
     },
   });

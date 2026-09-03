@@ -1,11 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 
 import {
+  useEffect,
   useState,
 } from 'react';
 
 import {
+  router,
+} from 'expo-router';
+
+import {
+  ActivityIndicator,
   Alert,
+  ImageBackground,
   Modal,
   Pressable,
   ScrollView,
@@ -23,7 +30,15 @@ import {
 } from 'firebase/auth';
 
 import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+} from 'firebase/firestore';
+
+import {
   auth,
+  db,
 } from '@/firebase/firebaseConfig';
 
 // ==========================================================
@@ -34,6 +49,22 @@ type ProfileTab =
   | 'guides'
   | 'posts'
   | 'saved';
+
+type Guide = {
+  id: string;
+  userId: string;
+  title: string;
+  destination: string;
+  caption: string;
+  coverImage: string | null;
+  durationDays: number;
+  isPublished: boolean;
+  likeCount: number;
+  saveCount: number;
+  createdAt?: {
+    toMillis?: () => number;
+  } | null;
+};
 
 // ==========================================================
 // SCREEN
@@ -53,6 +84,18 @@ export default function ProfileScreen() {
     setSettingsVisible,
   ] =
     useState(false);
+
+  const [
+    guides,
+    setGuides,
+  ] =
+    useState<Guide[]>([]);
+
+  const [
+    guidesLoading,
+    setGuidesLoading,
+  ] =
+    useState(true);
 
   const user =
     auth.currentUser;
@@ -74,6 +117,130 @@ export default function ProfileScreen() {
     getInitials(
       displayName
     );
+
+  // ========================================================
+  // LOAD USER GUIDES
+  // ========================================================
+
+  useEffect(() => {
+    if (!user) {
+      setGuides([]);
+      setGuidesLoading(false);
+
+      return;
+    }
+
+    setGuidesLoading(true);
+
+    const guidesQuery =
+      query(
+        collection(
+          db,
+          'guides'
+        ),
+        where(
+          'userId',
+          '==',
+          user.uid
+        )
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        guidesQuery,
+        snapshot => {
+          const loadedGuides =
+            snapshot.docs
+              .map(document => {
+                const data =
+                  document.data();
+
+                return {
+                  id:
+                    document.id,
+
+                  userId:
+                    data.userId ??
+                    '',
+
+                  title:
+                    data.title ??
+                    'Untitled guide',
+
+                  destination:
+                    data.destination ??
+                    '',
+
+                  caption:
+                    data.caption ??
+                    '',
+
+                  coverImage:
+                    data.coverImage ??
+                    null,
+
+                  durationDays:
+                    Number(
+                      data.durationDays ??
+                      1
+                    ),
+
+                  isPublished:
+                    data.isPublished ===
+                    true,
+
+                  likeCount:
+                    Number(
+                      data.likeCount ??
+                      0
+                    ),
+
+                  saveCount:
+                    Number(
+                      data.saveCount ??
+                      0
+                    ),
+
+                  createdAt:
+                    data.createdAt ??
+                    null,
+                } satisfies Guide;
+              })
+              .sort(
+                (
+                  a,
+                  b
+                ) =>
+                  getGuideCreatedTime(
+                    b
+                  ) -
+                  getGuideCreatedTime(
+                    a
+                  )
+              );
+
+          setGuides(
+            loadedGuides
+          );
+
+          setGuidesLoading(
+            false
+          );
+        },
+        error => {
+          console.log(
+            'Load guides error:',
+            error
+          );
+
+          setGuidesLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [user?.uid]);
 
   // ========================================================
   // LOGOUT
@@ -280,7 +447,9 @@ export default function ProfileScreen() {
             }
           >
             <StatItem
-              value="0"
+              value={
+                guides.length.toString()
+              }
               label="Guides"
             />
 
@@ -394,17 +563,114 @@ export default function ProfileScreen() {
 
           {activeTab ===
             'guides' && (
-            <EmptyProfileSection
-              icon="book-outline"
-              title="No guides yet"
-              description="Turn your trips into travel guides and share them with other BonVoyage travellers."
-              buttonText="Create a guide"
-              onPress={() =>
-                showComingSoon(
-                  'Create Guide'
-                )
-              }
-            />
+            <>
+              {guidesLoading ? (
+                <View
+                  style={
+                    styles.guidesLoading
+                  }
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color="#1769E8"
+                  />
+
+                  <Text
+                    style={
+                      styles.guidesLoadingText
+                    }
+                  >
+                    Loading guides...
+                  </Text>
+                </View>
+              ) : guides.length ===
+                0 ? (
+                <EmptyProfileSection
+                  icon="book-outline"
+                  title="No guides yet"
+                  description="Create itinerary-style travel guides and share recommendations with other BonVoyage travellers."
+                  buttonText="Create a guide"
+                  onPress={() =>
+                    router.push(
+                      '/create-guide'
+                    )
+                  }
+                />
+              ) : (
+                <View
+                  style={
+                    styles.guidesSection
+                  }
+                >
+                  <View
+                    style={
+                      styles.guidesHeader
+                    }
+                  >
+                    <View>
+                      <Text
+                        style={
+                          styles.guidesTitle
+                        }
+                      >
+                        My guides
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.guidesSubtitle
+                        }
+                      >
+                        Your published travel recommendations
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      style={
+                        styles.newGuideButton
+                      }
+                      onPress={() =>
+                        router.push(
+                          '/create-guide'
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name="add"
+                        size={18}
+                        color="#1769E8"
+                      />
+
+                      <Text
+                        style={
+                          styles.newGuideText
+                        }
+                      >
+                        New
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {guides.map(
+                    guide => (
+                      <GuideCard
+                        key={
+                          guide.id
+                        }
+                        guide={
+                          guide
+                        }
+                        onPress={() =>
+                          showComingSoon(
+                            'Guide Details'
+                          )
+                        }
+                      />
+                    )
+                  )}
+                </View>
+              )}
+            </>
           )}
 
           {/* ================================================= */}
@@ -756,6 +1022,223 @@ function ProfileTabButton({
 }
 
 // ==========================================================
+// GUIDE CARD
+// ==========================================================
+
+type GuideCardProps = {
+  guide: Guide;
+  onPress: () => void;
+};
+
+function GuideCard({
+  guide,
+  onPress,
+}: GuideCardProps) {
+  return (
+    <Pressable
+      style={
+        styles.guideCard
+      }
+      onPress={
+        onPress
+      }
+    >
+      {guide.coverImage ? (
+        <ImageBackground
+          source={{
+            uri:
+              guide.coverImage,
+          }}
+          style={
+            styles.guideImage
+          }
+          imageStyle={
+            styles.guideImageInner
+          }
+        >
+          <View
+            style={
+              styles.guideImageOverlay
+            }
+          />
+
+          <View
+            style={
+              styles.guideImageTop
+            }
+          >
+            <View
+              style={[
+                styles.guideStatusBadge,
+
+                !guide.isPublished &&
+                  styles.guideDraftBadge,
+              ]}
+            >
+              <Text
+                style={
+                  styles.guideStatusText
+                }
+              >
+                {guide.isPublished
+                  ? 'PUBLISHED'
+                  : 'DRAFT'}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.guideImageBottom
+            }
+          >
+            <Text
+              style={
+                styles.guideImageTitle
+              }
+              numberOfLines={2}
+            >
+              {guide.title}
+            </Text>
+
+            <View
+              style={
+                styles.guideDestinationRow
+              }
+            >
+              <Ionicons
+                name="location"
+                size={13}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.guideImageDestination
+                }
+                numberOfLines={1}
+              >
+                {guide.destination}
+              </Text>
+            </View>
+          </View>
+        </ImageBackground>
+      ) : (
+        <View
+          style={
+            styles.guideImageFallback
+          }
+        >
+          <Ionicons
+            name="map-outline"
+            size={34}
+            color="#1769E8"
+          />
+        </View>
+      )}
+
+      <View
+        style={
+          styles.guideCardBody
+        }
+      >
+        <Text
+          style={
+            styles.guideCaption
+          }
+          numberOfLines={2}
+        >
+          {guide.caption ||
+            'Travel itinerary and recommendations.'}
+        </Text>
+
+        <View
+          style={
+            styles.guideMetaRow
+          }
+        >
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={15}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.durationDays}{' '}
+              {guide.durationDays ===
+              1
+                ? 'day'
+                : 'days'}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="heart-outline"
+              size={15}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.likeCount}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.guideMetaItem
+            }
+          >
+            <Ionicons
+              name="bookmark-outline"
+              size={15}
+              color="#6B7280"
+            />
+
+            <Text
+              style={
+                styles.guideMetaText
+              }
+            >
+              {guide.saveCount}
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.guideCardArrow
+            }
+          >
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color="#9CA3AF"
+            />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ==========================================================
 // EMPTY PROFILE SECTION
 // ==========================================================
 
@@ -908,6 +1391,24 @@ function SettingsItem({
       />
     </Pressable>
   );
+}
+
+// ==========================================================
+// GUIDE CREATED TIME
+// ==========================================================
+
+function getGuideCreatedTime(
+  guide: Guide
+) {
+  try {
+    return (
+      guide.createdAt
+        ?.toMillis?.() ??
+      0
+    );
+  } catch {
+    return 0;
+  }
 }
 
 // ==========================================================
@@ -1304,6 +1805,272 @@ const styles =
 
       backgroundColor:
         '#1769E8',
+    },
+
+    // ------------------------------------------------------
+    // GUIDES
+    // ------------------------------------------------------
+
+    guidesLoading: {
+      paddingTop: 55,
+
+      alignItems:
+        'center',
+    },
+
+    guidesLoadingText: {
+      marginTop: 10,
+
+      fontSize: 12,
+
+      color: '#6B7280',
+    },
+
+    guidesSection: {
+      paddingTop: 22,
+    },
+
+    guidesHeader: {
+      marginBottom: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    guidesTitle: {
+      fontSize: 17,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    guidesSubtitle: {
+      marginTop: 3,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    newGuideButton: {
+      height: 38,
+
+      paddingHorizontal:
+        12,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#BFDBFE',
+
+      borderRadius: 12,
+
+      backgroundColor:
+        '#EFF6FF',
+    },
+
+    newGuideText: {
+      marginLeft: 4,
+
+      fontSize: 12,
+
+      fontWeight: '700',
+
+      color: '#1769E8',
+    },
+
+    guideCard: {
+      marginBottom: 17,
+
+      overflow:
+        'hidden',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 19,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity:
+        0.05,
+
+      shadowRadius: 8,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 2,
+    },
+
+    guideImage: {
+      height: 190,
+
+      justifyContent:
+        'space-between',
+    },
+
+    guideImageInner: {
+      borderTopLeftRadius:
+        18,
+
+      borderTopRightRadius:
+        18,
+    },
+
+    guideImageOverlay: {
+      ...StyleSheet.absoluteFill,
+
+      backgroundColor:
+        'rgba(0,0,0,0.28)',
+    },
+
+    guideImageTop: {
+      padding: 13,
+
+      alignItems:
+        'flex-end',
+    },
+
+    guideStatusBadge: {
+      paddingHorizontal:
+        9,
+
+      paddingVertical: 5,
+
+      borderRadius: 20,
+
+      backgroundColor:
+        'rgba(23,105,232,0.92)',
+    },
+
+    guideDraftBadge: {
+      backgroundColor:
+        'rgba(75,85,99,0.92)',
+    },
+
+    guideStatusText: {
+      fontSize: 9,
+
+      fontWeight: '800',
+
+      letterSpacing:
+        0.7,
+
+      color: '#FFFFFF',
+    },
+
+    guideImageBottom: {
+      padding: 15,
+    },
+
+    guideImageTitle: {
+      fontSize: 21,
+
+      fontWeight: '900',
+
+      color: '#FFFFFF',
+    },
+
+    guideDestinationRow: {
+      marginTop: 5,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    guideImageDestination: {
+      flex: 1,
+
+      marginLeft: 4,
+
+      fontSize: 12,
+
+      color: '#FFFFFF',
+    },
+
+    guideImageFallback: {
+      height: 190,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    guideCardBody: {
+      padding: 14,
+    },
+
+    guideCaption: {
+      fontSize: 13,
+
+      lineHeight: 19,
+
+      color: '#374151',
+    },
+
+    guideMetaRow: {
+      marginTop: 13,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    guideMetaItem: {
+      marginRight: 15,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    guideMetaText: {
+      marginLeft: 4,
+
+      fontSize: 11,
+
+      color: '#6B7280',
+    },
+
+    guideCardArrow: {
+      marginLeft: 'auto',
     },
 
     // ------------------------------------------------------
