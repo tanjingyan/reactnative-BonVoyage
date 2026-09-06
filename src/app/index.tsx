@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+
 import {
   Pressable,
   StyleSheet,
@@ -13,9 +14,21 @@ import {
 } from 'react-native-safe-area-context';
 
 export default function WelcomeScreen() {
+  function goToRegister() {
+    router.push('/register');
+  }
+
+  function goToLogin() {
+    router.push('/login');
+  }
+
   return (
     <SafeAreaView
       style={styles.safeArea}
+      edges={[
+        'top',
+        'bottom',
+      ]}
     >
       <StatusBar
         style="dark"
@@ -24,134 +37,106 @@ export default function WelcomeScreen() {
       <View
         style={styles.container}
       >
-        {/* ================================================= */}
-        {/* MAIN CONTENT                                      */}
-        {/* ================================================= */}
+        {/* LOGO */}
 
         <View
-          style={styles.mainContent}
+          style={styles.logoIcon}
         >
-          {/* LOGO */}
-
-          <View
-            style={
-              styles.logoContainer
-            }
-          >
-            <View
-              style={styles.logoIcon}
-            >
-              <Ionicons
-                name="airplane"
-                size={29}
-                color="#1769E8"
-              />
-            </View>
-
-            <Text
-              style={styles.logoText}
-            >
-              BonVoyage
-            </Text>
-          </View>
-
-          {/* TAGLINE */}
-
-          <Text
-            style={styles.tagline}
-          >
-            Explore. Plan. Travel.
-          </Text>
-
-          <Text
-            style={
-              styles.description
-            }
-          >
-            Your journey starts here.
-          </Text>
-
-          {/* PAGE DOTS */}
-
-          <View
-            style={styles.dots}
-          >
-            <View
-              style={[
-                styles.dot,
-                styles.activeDot,
-              ]}
-            />
-
-            <View
-              style={styles.dot}
-            />
-
-            <View
-              style={styles.dot}
-            />
-          </View>
+          <Ionicons
+            name="airplane"
+            size={29}
+            color="#1769E8"
+          />
         </View>
 
-        {/* ================================================= */}
-        {/* BOTTOM ACTIONS                                    */}
-        {/* ================================================= */}
+        <Text
+          style={styles.logoText}
+        >
+          BonVoyage
+        </Text>
+
+        <Text
+          style={styles.tagline}
+        >
+          Explore. Plan. Travel.
+        </Text>
+
+        <Text
+          style={styles.description}
+        >
+          Your journey starts here.
+        </Text>
+
+        {/* DOTS */}
 
         <View
-          style={
-            styles.bottomContainer
-          }
+          style={styles.dots}
         >
-          <Pressable
-            style={({ pressed }) => [
-              styles.getStartedButton,
-
-              pressed &&
-                styles.buttonPressed,
+          <View
+            style={[
+              styles.dot,
+              styles.activeDot,
             ]}
-            onPress={() =>
-              router.push(
-                '/register'
-              )
-            }
-          >
-            <Text
-              style={
-                styles.getStartedText
-              }
-            >
-              GET STARTED
-            </Text>
-          </Pressable>
+          />
 
           <View
-            style={styles.loginRow}
+            style={styles.dot}
+          />
+
+          <View
+            style={styles.dot}
+          />
+        </View>
+
+        {/* GET STARTED */}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.getStartedButton,
+
+            pressed &&
+              styles.buttonPressed,
+          ]}
+          onPress={
+            goToRegister
+          }
+        >
+          <Text
+            style={
+              styles.getStartedText
+            }
+          >
+            GET STARTED
+          </Text>
+        </Pressable>
+
+        {/* LOGIN */}
+
+        <View
+          style={styles.loginRow}
+        >
+          <Text
+            style={
+              styles.accountText
+            }
+          >
+            ALREADY HAVE AN ACCOUNT?
+          </Text>
+
+          <Pressable
+            onPress={
+              goToLogin
+            }
+            hitSlop={12}
           >
             <Text
               style={
-                styles.accountText
+                styles.loginText
               }
             >
-              ALREADY HAVE AN ACCOUNT?
+              LOG IN
             </Text>
-
-            <Pressable
-              onPress={() =>
-                router.push(
-                  '/login'
-                )
-              }
-              hitSlop={10}
-            >
-              <Text
-                style={
-                  styles.loginText
-                }
-              >
-                LOG IN
-              </Text>
-            </Pressable>
-          </View>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -170,40 +155,36 @@ const styles =
     container: {
       flex: 1,
 
-      paddingHorizontal: 30,
+      paddingHorizontal:
+        30,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
 
       backgroundColor:
         '#FFFFFF',
     },
 
     // ======================================================
-    // MAIN
+    // LOGO
     // ======================================================
-
-    mainContent: {
-      flex: 1,
-
-      alignItems: 'center',
-
-      justifyContent:
-        'center',
-
-      paddingBottom: 40,
-    },
-
-    logoContainer: {
-      alignItems: 'center',
-    },
 
     logoIcon: {
       width: 58,
+
       height: 58,
 
-      marginBottom: 16,
+      marginBottom:
+        15,
 
-      borderRadius: 18,
+      borderRadius:
+        18,
 
-      alignItems: 'center',
+      alignItems:
+        'center',
 
       justifyContent:
         'center',
@@ -217,29 +198,39 @@ const styles =
 
       lineHeight: 46,
 
-      fontWeight: '900',
+      fontWeight:
+        '900',
 
-      letterSpacing: -1.2,
+      letterSpacing:
+        -1.2,
 
-      color: '#111827',
+      color:
+        '#111827',
     },
 
     tagline: {
-      marginTop: 16,
+      marginTop:
+        14,
 
-      fontSize: 17,
+      fontSize:
+        17,
 
-      fontWeight: '700',
+      fontWeight:
+        '700',
 
-      color: '#1769E8',
+      color:
+        '#1769E8',
     },
 
     description: {
-      marginTop: 7,
+      marginTop:
+        7,
 
-      fontSize: 14,
+      fontSize:
+        14,
 
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
     // ======================================================
@@ -247,22 +238,31 @@ const styles =
     // ======================================================
 
     dots: {
-      marginTop: 48,
+      marginTop:
+        42,
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      gap: 12,
+      gap:
+        12,
     },
 
     dot: {
-      width: 7,
-      height: 7,
+      width:
+        7,
 
-      borderRadius: 4,
+      height:
+        7,
 
-      borderWidth: 1,
+      borderRadius:
+        4,
+
+      borderWidth:
+        1,
 
       borderColor:
         '#9CA3AF',
@@ -272,8 +272,11 @@ const styles =
     },
 
     activeDot: {
-      width: 8,
-      height: 8,
+      width:
+        8,
+
+      height:
+        8,
 
       borderColor:
         '#111827',
@@ -283,19 +286,24 @@ const styles =
     },
 
     // ======================================================
-    // BOTTOM
+    // GET STARTED
     // ======================================================
 
-    bottomContainer: {
-      paddingBottom: 38,
-    },
-
     getStartedButton: {
-      height: 52,
+      width:
+        '100%',
 
-      borderRadius: 12,
+      height:
+        52,
 
-      alignItems: 'center',
+      marginTop:
+        50,
+
+      borderRadius:
+        12,
+
+      alignItems:
+        'center',
 
       justifyContent:
         'center',
@@ -303,67 +311,76 @@ const styles =
       backgroundColor:
         '#1769E8',
 
-      shadowColor:
-        '#1769E8',
-
-      shadowOpacity: 0.16,
-
-      shadowRadius: 8,
-
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-
-      elevation: 3,
+      elevation:
+        3,
     },
 
     buttonPressed: {
-      opacity: 0.82,
+      opacity:
+        0.82,
 
       transform: [
         {
-          scale: 0.99,
+          scale:
+            0.99,
         },
       ],
     },
 
     getStartedText: {
-      fontSize: 13,
+      fontSize:
+        13,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      letterSpacing: 0.5,
+      letterSpacing:
+        0.5,
 
-      color: '#FFFFFF',
+      color:
+        '#FFFFFF',
     },
 
-    loginRow: {
-      marginTop: 20,
+    // ======================================================
+    // LOGIN
+    // ======================================================
 
-      flexDirection: 'row',
+    loginRow: {
+      marginTop:
+        19,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
 
       justifyContent:
         'center',
 
-      alignItems: 'center',
-
-      gap: 5,
+      gap:
+        5,
     },
 
     accountText: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      fontWeight: '600',
+      fontWeight:
+        '600',
 
-      color: '#9CA3AF',
+      color:
+        '#9CA3AF',
     },
 
     loginText: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      color: '#1769E8',
+      color:
+        '#1769E8',
     },
   });
