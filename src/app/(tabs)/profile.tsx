@@ -14,6 +14,7 @@ import {
   Alert,
   Image,
   ImageBackground,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -40,6 +41,7 @@ import {
 
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -66,8 +68,11 @@ import {
 
 type ProfileTab =
   | 'guides'
-  | 'posts'
   | 'saved';
+
+type SavedContentTab =
+  | 'places'
+  | 'guides';
 
 type SettingsPage =
   | 'main'
@@ -102,6 +107,26 @@ type Guide = {
   createdAt?: {
     toMillis?: () => number;
   } | null;
+  savedAt?: {
+    toMillis?: () => number;
+  } | null;
+};
+
+type SavedPlace = {
+  id: string;
+  placeId: string | null;
+  displayName: string;
+  formattedAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  rating: number | null;
+  userRatingCount: number | null;
+  primaryType: string | null;
+  googleMapsUri: string | null;
+  photoUri: string | null;
+  savedAt?: {
+    toMillis?: () => number;
+  } | null;
 };
 
 // ==========================================================
@@ -115,6 +140,14 @@ export default function ProfileScreen() {
   ] =
     useState<ProfileTab>(
       'guides'
+    );
+
+  const [
+    savedContentTab,
+    setSavedContentTab,
+  ] =
+    useState<SavedContentTab>(
+      'places'
     );
 
   const [
@@ -184,6 +217,30 @@ export default function ProfileScreen() {
   const [
     guidesLoading,
     setGuidesLoading,
+  ] =
+    useState(true);
+
+  const [
+    savedGuides,
+    setSavedGuides,
+  ] =
+    useState<Guide[]>([]);
+
+  const [
+    savedGuidesLoading,
+    setSavedGuidesLoading,
+  ] =
+    useState(true);
+
+  const [
+    savedPlaces,
+    setSavedPlaces,
+  ] =
+    useState<SavedPlace[]>([]);
+
+  const [
+    savedPlacesLoading,
+    setSavedPlacesLoading,
   ] =
     useState(true);
 
@@ -522,6 +579,304 @@ export default function ProfileScreen() {
 
     return unsubscribe;
   }, [user?.uid]);
+
+  // ========================================================
+  // LOAD SAVED GUIDES
+  // ========================================================
+
+  useEffect(() => {
+    if (!user) {
+      setSavedGuides([]);
+      setSavedGuidesLoading(false);
+
+      return;
+    }
+
+    setSavedGuidesLoading(true);
+
+    const savedGuidesRef =
+      collection(
+        db,
+        'users',
+        user.uid,
+        'savedGuides'
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        savedGuidesRef,
+        snapshot => {
+          const loadedSavedGuides =
+            snapshot.docs
+              .map(document => {
+                const data =
+                  document.data();
+
+                return {
+                  id:
+                    document.id,
+
+                  userId:
+                    data.userId ??
+                    '',
+
+                  title:
+                    data.title ??
+                    'Untitled guide',
+
+                  destination:
+                    data.destination ??
+                    '',
+
+                  caption:
+                    data.caption ??
+                    '',
+
+                  coverImage:
+                    data.coverImage ??
+                    null,
+
+                  durationDays:
+                    Number(
+                      data.durationDays ??
+                      1
+                    ),
+
+                  isPublished:
+                    data.isPublished !==
+                    false,
+
+                  likeCount:
+                    Number(
+                      data.likeCount ??
+                      0
+                    ),
+
+                  saveCount:
+                    Number(
+                      data.saveCount ??
+                      0
+                    ),
+
+                  createdAt:
+                    data.createdAt ??
+                    null,
+
+                  savedAt:
+                    data.savedAt ??
+                    null,
+                } satisfies Guide;
+              })
+              .sort(
+                (a, b) =>
+                  getGuideSavedTime(
+                    b
+                  ) -
+                  getGuideSavedTime(
+                    a
+                  )
+              );
+
+          setSavedGuides(
+            loadedSavedGuides
+          );
+
+          setSavedGuidesLoading(
+            false
+          );
+        },
+        error => {
+          console.log(
+            'Load saved guides error:',
+            error
+          );
+
+          setSavedGuidesLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [user?.uid]);
+
+  // ========================================================
+  // LOAD SAVED PLACES
+  // ========================================================
+
+  useEffect(() => {
+    if (!user) {
+      setSavedPlaces([]);
+      setSavedPlacesLoading(false);
+      return;
+    }
+
+    setSavedPlacesLoading(true);
+
+    const savedPlacesRef =
+      collection(
+        db,
+        'users',
+        user.uid,
+        'savedPlaces'
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        savedPlacesRef,
+        snapshot => {
+          const loadedSavedPlaces =
+            snapshot.docs
+              .map(document => {
+                const data =
+                  document.data();
+
+                return {
+                  id:
+                    document.id,
+                  placeId:
+                    data.placeId ??
+                    null,
+                  displayName:
+                    data.displayName ??
+                    'Saved place',
+                  formattedAddress:
+                    data.formattedAddress ??
+                    null,
+                  latitude:
+                    typeof data.latitude ===
+                    'number'
+                      ? data.latitude
+                      : null,
+                  longitude:
+                    typeof data.longitude ===
+                    'number'
+                      ? data.longitude
+                      : null,
+                  rating:
+                    typeof data.rating ===
+                    'number'
+                      ? data.rating
+                      : null,
+                  userRatingCount:
+                    typeof data.userRatingCount ===
+                    'number'
+                      ? data.userRatingCount
+                      : null,
+                  primaryType:
+                    data.primaryType ??
+                    null,
+                  googleMapsUri:
+                    data.googleMapsUri ??
+                    null,
+                  photoUri:
+                    data.photoUri ??
+                    null,
+                  savedAt:
+                    data.savedAt ??
+                    null,
+                } satisfies SavedPlace;
+              })
+              .sort(
+                (a, b) =>
+                  getSavedPlaceTime(
+                    b
+                  ) -
+                  getSavedPlaceTime(
+                    a
+                  )
+              );
+
+          setSavedPlaces(
+            loadedSavedPlaces
+          );
+          setSavedPlacesLoading(
+            false
+          );
+        },
+        error => {
+          console.log(
+            'Load saved places error:',
+            error
+          );
+          setSavedPlacesLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [user?.uid]);
+
+  async function openSavedPlace(
+    place: SavedPlace
+  ) {
+    try {
+      if (place.googleMapsUri) {
+        await Linking.openURL(
+          place.googleMapsUri
+        );
+        return;
+      }
+
+      if (
+        place.latitude !== null &&
+        place.longitude !== null
+      ) {
+        await Linking.openURL(
+          'https://www.google.com/maps/search/?api=1' +
+            `&query=${place.latitude},${place.longitude}`
+        );
+        return;
+      }
+
+      await Linking.openURL(
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${place.displayName} ${place.formattedAddress ?? ''}`
+        )}`
+      );
+    } catch (error) {
+      console.log(
+        'Open saved place error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to open place',
+        'BonVoyage could not open this place in Google Maps.'
+      );
+    }
+  }
+
+  async function removeSavedPlace(
+    place: SavedPlace
+  ) {
+    if (!user) {
+      return;
+    }
+
+    try {
+      await deleteDoc(
+        doc(
+          db,
+          'users',
+          user.uid,
+          'savedPlaces',
+          place.id
+        )
+      );
+    } catch (error) {
+      console.log(
+        'Remove saved place error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to remove place',
+        'BonVoyage could not remove this saved place. Please try again.'
+      );
+    }
+  }
 
   // ========================================================
   // PROFILE PICTURE
@@ -1208,18 +1563,12 @@ export default function ProfileScreen() {
             />
 
             <StatItem
-              value="0"
-              label="Posts"
-            />
-
-            <View
-              style={
-                styles.statDivider
+              value={
+                (
+                  savedGuides.length +
+                  savedPlaces.length
+                ).toString()
               }
-            />
-
-            <StatItem
-              value="0"
               label="Saved"
             />
           </View>
@@ -1270,20 +1619,6 @@ export default function ProfileScreen() {
               onPress={() =>
                 setActiveTab(
                   'guides'
-                )
-              }
-            />
-
-            <ProfileTabButton
-              title="Posts"
-              icon="images-outline"
-              active={
-                activeTab ===
-                'posts'
-              }
-              onPress={() =>
-                setActiveTab(
-                  'posts'
                 )
               }
             />
@@ -1407,9 +1742,14 @@ export default function ProfileScreen() {
                           guide
                         }
                         onPress={() =>
-                          showComingSoon(
-                            'Guide Details'
-                          )
+                          router.push({
+                            pathname:
+                              '/guide/[id]',
+                            params: {
+                              id:
+                                guide.id,
+                            },
+                          } as any)
                         }
                       />
                     )
@@ -1420,35 +1760,212 @@ export default function ProfileScreen() {
           )}
 
           {/* ================================================= */}
-          {/* POSTS TAB                                        */}
-          {/* ================================================= */}
-
-          {activeTab ===
-            'posts' && (
-            <EmptyProfileSection
-              icon="images-outline"
-              title="No posts yet"
-              description="Share travel photos, experiences and recommendations from your adventures."
-              buttonText="Create a post"
-              onPress={() =>
-                showComingSoon(
-                  'Create Post'
-                )
-              }
-            />
-          )}
-
-          {/* ================================================= */}
           {/* SAVED TAB                                        */}
           {/* ================================================= */}
 
           {activeTab ===
             'saved' && (
-            <EmptyProfileSection
-              icon="bookmark-outline"
-              title="Nothing saved yet"
-              description="Places and travel guides that you save will appear here."
-            />
+            <View
+              style={
+                styles.savedSection
+              }
+            >
+              <View
+                style={
+                  styles.savedTypeTabs
+                }
+              >
+                <SavedTypeTabButton
+                  title="Places"
+                  count={
+                    savedPlaces.length
+                  }
+                  active={
+                    savedContentTab ===
+                    'places'
+                  }
+                  onPress={() =>
+                    setSavedContentTab(
+                      'places'
+                    )
+                  }
+                />
+
+                <SavedTypeTabButton
+                  title="Guides"
+                  count={
+                    savedGuides.length
+                  }
+                  active={
+                    savedContentTab ===
+                    'guides'
+                  }
+                  onPress={() =>
+                    setSavedContentTab(
+                      'guides'
+                    )
+                  }
+                />
+              </View>
+
+              {savedContentTab ===
+              'places' ? (
+                savedPlacesLoading ? (
+                  <View
+                    style={
+                      styles.guidesLoading
+                    }
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color="#1769E8"
+                    />
+
+                    <Text
+                      style={
+                        styles.guidesLoadingText
+                      }
+                    >
+                      Loading saved places...
+                    </Text>
+                  </View>
+                ) : savedPlaces.length ===
+                  0 ? (
+                  <EmptyProfileSection
+                    icon="location-outline"
+                    title="No saved places yet"
+                    description="Bookmark places in Explore and they will appear here."
+                  />
+                ) : (
+                  <View>
+                    <View
+                      style={
+                        styles.savedHeading
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.guidesTitle
+                        }
+                      >
+                        Saved places
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.guidesSubtitle
+                        }
+                      >
+                        Places you want to visit
+                      </Text>
+                    </View>
+
+                    {savedPlaces.map(
+                      place => (
+                        <SavedPlaceCard
+                          key={
+                            place.id
+                          }
+                          place={
+                            place
+                          }
+                          onPress={() =>
+                            void openSavedPlace(
+                              place
+                            )
+                          }
+                          onRemove={() =>
+                            void removeSavedPlace(
+                              place
+                            )
+                          }
+                        />
+                      )
+                    )}
+                  </View>
+                )
+              ) : savedGuidesLoading ? (
+                <View
+                  style={
+                    styles.guidesLoading
+                  }
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color="#1769E8"
+                  />
+
+                  <Text
+                    style={
+                      styles.guidesLoadingText
+                    }
+                  >
+                    Loading saved guides...
+                  </Text>
+                </View>
+              ) : savedGuides.length ===
+                0 ? (
+                <EmptyProfileSection
+                  icon="bookmark-outline"
+                  title="No saved guides yet"
+                  description="Travel guides that you save will appear here."
+                />
+              ) : (
+                <View
+                  style={
+                    styles.guidesSection
+                  }
+                >
+                  <View
+                    style={
+                      styles.guidesHeader
+                    }
+                  >
+                    <View>
+                      <Text
+                        style={
+                          styles.guidesTitle
+                        }
+                      >
+                        Saved guides
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.guidesSubtitle
+                        }
+                      >
+                        Travel guides you want to revisit
+                      </Text>
+                    </View>
+                  </View>
+
+                  {savedGuides.map(
+                    guide => (
+                      <GuideCard
+                        key={
+                          guide.id
+                        }
+                        guide={
+                          guide
+                        }
+                        saved
+                        onPress={() =>
+                          router.push({
+                            pathname:
+                              '/guide/[id]',
+                            params: {
+                              id:
+                                guide.id,
+                            },
+                          } as any)
+                        }
+                      />
+                    )
+                  )}
+                </View>
+              )}
+            </View>
           )}
 
           <View
@@ -2196,11 +2713,13 @@ function ProfileTabButton({
 type GuideCardProps = {
   guide: Guide;
   onPress: () => void;
+  saved?: boolean;
 };
 
 function GuideCard({
   guide,
   onPress,
+  saved = false,
 }: GuideCardProps) {
   return (
     <Pressable
@@ -2385,7 +2904,9 @@ function GuideCard({
                 styles.guideMetaText
               }
             >
-              {guide.saveCount}
+              {saved
+                ? Math.max(guide.saveCount, 1)
+                : guide.saveCount}
             </Text>
           </View>
 
@@ -2404,6 +2925,218 @@ function GuideCard({
       </View>
     </Pressable>
   );
+}
+
+// ==========================================================
+// SAVED CONTENT TYPE TAB
+// ==========================================================
+
+type SavedTypeTabButtonProps = {
+  title: string;
+  count: number;
+  active: boolean;
+  onPress: () => void;
+};
+
+function SavedTypeTabButton({
+  title,
+  count,
+  active,
+  onPress,
+}: SavedTypeTabButtonProps) {
+  return (
+    <Pressable
+      style={[
+        styles.savedTypeTabButton,
+        active &&
+          styles.savedTypeTabButtonActive,
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.savedTypeTabText,
+          active &&
+            styles.savedTypeTabTextActive,
+        ]}
+      >
+        {title}
+      </Text>
+
+      <View
+        style={[
+          styles.savedTypeCount,
+          active &&
+            styles.savedTypeCountActive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.savedTypeCountText,
+            active &&
+              styles.savedTypeCountTextActive,
+          ]}
+        >
+          {count}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// ==========================================================
+// SAVED PLACE CARD
+// ==========================================================
+
+type SavedPlaceCardProps = {
+  place: SavedPlace;
+  onPress: () => void;
+  onRemove: () => void;
+};
+
+function SavedPlaceCard({
+  place,
+  onPress,
+  onRemove,
+}: SavedPlaceCardProps) {
+  return (
+    <Pressable
+      style={
+        styles.savedPlaceCard
+      }
+      onPress={
+        onPress
+      }
+    >
+      {place.photoUri ? (
+        <Image
+          source={{
+            uri:
+              place.photoUri,
+          }}
+          style={
+            styles.savedPlaceImage
+          }
+          resizeMode="cover"
+        />
+      ) : (
+        <View
+          style={[
+            styles.savedPlaceImage,
+            styles.savedPlaceImageFallback,
+          ]}
+        >
+          <Ionicons
+            name="image-outline"
+            size={28}
+            color="#9CA3AF"
+          />
+        </View>
+      )}
+
+      <View
+        style={
+          styles.savedPlaceInfo
+        }
+      >
+        <Text
+          style={
+            styles.savedPlaceName
+          }
+          numberOfLines={1}
+        >
+          {place.displayName}
+        </Text>
+
+        {place.formattedAddress ? (
+          <Text
+            style={
+              styles.savedPlaceAddress
+            }
+            numberOfLines={2}
+          >
+            {place.formattedAddress}
+          </Text>
+        ) : null}
+
+        {place.rating !==
+        null ? (
+          <View
+            style={
+              styles.savedPlaceRatingRow
+            }
+          >
+            <Ionicons
+              name="star"
+              size={13}
+              color="#111827"
+            />
+
+            <Text
+              style={
+                styles.savedPlaceRatingText
+              }
+            >
+              {place.rating.toFixed(1)}
+              {place.userRatingCount !==
+              null
+                ? ` (${formatProfileCompactCount(
+                    place.userRatingCount
+                  )})`
+                : ''}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Pressable
+        style={
+          styles.savedPlaceBookmark
+        }
+        hitSlop={8}
+        onPress={event => {
+          event.stopPropagation();
+          onRemove();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${place.displayName} from saved places`}
+      >
+        <Ionicons
+          name="bookmark"
+          size={22}
+          color="#1769E8"
+        />
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function getSavedPlaceTime(
+  place: SavedPlace
+) {
+  if (
+    place.savedAt &&
+    typeof place.savedAt.toMillis ===
+      'function'
+  ) {
+    return place.savedAt.toMillis();
+  }
+
+  return 0;
+}
+
+function formatProfileCompactCount(
+  value: number
+) {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1).replace('.0', '')}M`;
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1).replace('.0', '')}K`;
+  }
+
+  return String(value);
 }
 
 // ==========================================================
@@ -2577,6 +3310,20 @@ function getGuideCreatedTime(
   } catch {
     return 0;
   }
+}
+
+function getGuideSavedTime(
+  guide: Guide
+) {
+  if (
+    guide.savedAt &&
+    typeof guide.savedAt.toMillis ===
+      'function'
+  ) {
+    return guide.savedAt.toMillis();
+  }
+
+  return 0;
 }
 
 // ==========================================================
@@ -4030,6 +4777,149 @@ const styles =
       fontWeight: '600',
 
       color: '#111827',
+    },
+
+    // ------------------------------------------------------
+    // SAVED PLACES / GUIDES
+    // ------------------------------------------------------
+
+    savedSection: {
+      paddingTop: 18,
+    },
+
+    savedTypeTabs: {
+      marginHorizontal: 20,
+      marginBottom: 20,
+      padding: 4,
+      flexDirection: 'row',
+      gap: 6,
+      borderRadius: 14,
+      backgroundColor: '#F3F4F6',
+    },
+
+    savedTypeTabButton: {
+      flex: 1,
+      minHeight: 42,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      borderRadius: 11,
+    },
+
+    savedTypeTabButtonActive: {
+      backgroundColor: '#FFFFFF',
+      elevation: 1,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+    },
+
+    savedTypeTabText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#6B7280',
+    },
+
+    savedTypeTabTextActive: {
+      color: '#1769E8',
+    },
+
+    savedTypeCount: {
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 6,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#E5E7EB',
+    },
+
+    savedTypeCountActive: {
+      backgroundColor: '#EAF2FF',
+    },
+
+    savedTypeCountText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: '#6B7280',
+    },
+
+    savedTypeCountTextActive: {
+      color: '#1769E8',
+    },
+
+    savedHeading: {
+      marginHorizontal: 20,
+      marginBottom: 14,
+    },
+
+    savedPlaceCard: {
+      marginHorizontal: 20,
+      marginBottom: 12,
+      minHeight: 98,
+      padding: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      borderRadius: 16,
+      backgroundColor: '#FFFFFF',
+    },
+
+    savedPlaceImage: {
+      width: 84,
+      height: 76,
+      borderRadius: 12,
+      marginRight: 12,
+      backgroundColor: '#E5E7EB',
+    },
+
+    savedPlaceImageFallback: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    savedPlaceInfo: {
+      flex: 1,
+      paddingRight: 4,
+    },
+
+    savedPlaceName: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#111827',
+    },
+
+    savedPlaceAddress: {
+      marginTop: 4,
+      fontSize: 11,
+      lineHeight: 16,
+      color: '#6B7280',
+    },
+
+    savedPlaceRatingRow: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+
+    savedPlaceRatingText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#374151',
+    },
+
+    savedPlaceBookmark: {
+      width: 38,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
 
     // ------------------------------------------------------

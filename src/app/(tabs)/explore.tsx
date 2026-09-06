@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 
+import { router } from 'expo-router';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import DateTimePicker, {
@@ -13,10 +15,13 @@ import {
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   onSnapshot,
   query as firestoreQuery,
   serverTimestamp,
+  setDoc,
   where,
 } from 'firebase/firestore';
 
@@ -107,6 +112,74 @@ type GooglePlace = {
 type SearchPlacesResponse = {
   places: GooglePlace[];
 };
+
+
+// ==========================================================
+// WORLD RECOMMENDATIONS
+// ==========================================================
+
+const WORLD_RECOMMENDATION_GROUPS = [
+  {
+    region: 'Europe',
+    queries: [
+      'Eiffel Tower Paris',
+      'Colosseum Rome',
+      'Sagrada Familia Barcelona',
+      'Big Ben London',
+      'Acropolis Athens',
+    ],
+  },
+  {
+    region: 'Asia',
+    queries: [
+      'Senso-ji Temple Tokyo',
+      'Fushimi Inari Shrine Kyoto',
+      'Marina Bay Sands Singapore',
+      'Petronas Twin Towers Kuala Lumpur',
+      'Grand Palace Bangkok',
+    ],
+  },
+  {
+    region: 'Americas',
+    queries: [
+      'Statue of Liberty New York',
+      'Golden Gate Bridge San Francisco',
+      'Christ the Redeemer Rio de Janeiro',
+      'Machu Picchu Peru',
+      'Chichen Itza Mexico',
+    ],
+  },
+  {
+    region: 'Africa',
+    queries: [
+      'Pyramids of Giza Egypt',
+      'Table Mountain Cape Town',
+      'Victoria Falls Zimbabwe',
+      'Kirstenbosch National Botanical Garden Cape Town',
+      'Hassan II Mosque Casablanca',
+    ],
+  },
+  {
+    region: 'Oceania',
+    queries: [
+      'Sydney Opera House Australia',
+      'Great Barrier Reef Cairns',
+      'Milford Sound New Zealand',
+      'Sky Tower Auckland',
+      'Twelve Apostles Victoria Australia',
+    ],
+  },
+  {
+    region: 'Middle East',
+    queries: [
+      'Burj Khalifa Dubai',
+      'Sheikh Zayed Grand Mosque Abu Dhabi',
+      'Petra Jordan',
+      'Museum of the Future Dubai',
+      'AlUla Hegra Saudi Arabia',
+    ],
+  },
+] as const;
 
 type TripOption = {
   id: string;
@@ -200,6 +273,396 @@ export default function ExploreScreen() {
     setHasSearched,
   ] =
     useState(false);
+
+  const [
+    recommendedPlaces,
+    setRecommendedPlaces,
+  ] =
+    useState<GooglePlace[]>([]);
+
+  const [
+    recommendedPlacesLoading,
+    setRecommendedPlacesLoading,
+  ] =
+    useState(true);
+
+  const [
+    savedPlaceIds,
+    setSavedPlaceIds,
+  ] =
+    useState<Set<string>>(
+      new Set()
+    );
+
+  // ========================================================
+  // SAVED PLACES
+  // ========================================================
+
+  useEffect(() => {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      setSavedPlaceIds(
+        new Set()
+      );
+      return;
+    }
+
+    const savedPlacesRef =
+      collection(
+        db,
+        'users',
+        user.uid,
+        'savedPlaces'
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        savedPlacesRef,
+        snapshot => {
+          setSavedPlaceIds(
+            new Set(
+              snapshot.docs.map(
+                item => item.id
+              )
+            )
+          );
+        },
+        error => {
+          console.log(
+            'Load saved places error:',
+            error
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, []);
+
+  function getSavedPlaceDocumentId(
+    place: GooglePlace
+  ) {
+    if (place.id) {
+      return place.id;
+    }
+
+    return encodeURIComponent(
+      `${place.displayName}|${place.formattedAddress ?? ''}`
+    );
+  }
+
+  async function toggleSavedPlace(
+    place: GooglePlace
+  ) {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      Alert.alert(
+        'Login required',
+        'Please log in before saving a place.'
+      );
+      return;
+    }
+
+    const savedPlaceId =
+      getSavedPlaceDocumentId(
+        place
+      );
+
+    const savedPlaceRef =
+      doc(
+        db,
+        'users',
+        user.uid,
+        'savedPlaces',
+        savedPlaceId
+      );
+
+    try {
+      if (
+        savedPlaceIds.has(
+          savedPlaceId
+        )
+      ) {
+        await deleteDoc(
+          savedPlaceRef
+        );
+        return;
+      }
+
+      await setDoc(
+        savedPlaceRef,
+        {
+          placeId:
+            place.id,
+          displayName:
+            place.displayName,
+          formattedAddress:
+            place.formattedAddress,
+          latitude:
+            place.latitude,
+          longitude:
+            place.longitude,
+          rating:
+            place.rating,
+          userRatingCount:
+            place.userRatingCount,
+          primaryType:
+            place.primaryType,
+          googleMapsUri:
+            place.googleMapsUri,
+          photoUri:
+            place.photoUri,
+          savedAt:
+            serverTimestamp(),
+        }
+      );
+    } catch (error) {
+      console.error(
+        'Save place error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to save place',
+        'BonVoyage could not update your saved places. Please try again.'
+      );
+    }
+  }
+
+  // ========================================================
+  // RANDOM WORLD RECOMMENDATIONS
+  // ========================================================
+
+  useEffect(() => {
+    void loadRecommendedPlaces();
+  }, []);
+
+  async function loadRecommendedPlaces() {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      setRecommendedPlaces([]);
+      setRecommendedPlacesLoading(false);
+      return;
+    }
+
+    try {
+      setRecommendedPlacesLoading(true);
+
+      const searchPlacesFunction =
+        httpsCallable<
+          {
+            query: string;
+          },
+          SearchPlacesResponse
+        >(
+          functions,
+          'searchPlaces'
+        );
+
+      /*
+       * Pick one landmark from several different world regions.
+       * We request more than three candidates so that places without
+       * a Google photo can be skipped without showing a placeholder.
+       */
+      const shuffledGroups =
+        shuffleArray(
+          WORLD_RECOMMENDATION_GROUPS
+        );
+
+      const candidateQueries =
+        shuffledGroups
+          .slice(0, 5)
+          .map(group => {
+            const randomIndex =
+              Math.floor(
+                Math.random() *
+                  group.queries.length
+              );
+
+            return group.queries[
+              randomIndex
+            ];
+          });
+
+      const responses =
+        await Promise.all(
+          candidateQueries.map(
+            async query => {
+              try {
+                const result =
+                  await searchPlacesFunction({
+                    query,
+                  });
+
+                const candidates =
+                  result.data.places ??
+                  [];
+
+                /*
+                 * Only keep a result that has a real Google Places
+                 * photo. This prevents the grey placeholder shown by
+                 * the earlier hard-coded recommendations.
+                 */
+                return (
+                  candidates.find(
+                    place =>
+                      Boolean(
+                        place.photoUri
+                      )
+                  ) ??
+                  null
+                );
+              } catch (error) {
+                console.log(
+                  'Recommendation search failed:',
+                  query,
+                  error
+                );
+
+                return null;
+              }
+            }
+          )
+        );
+
+      const uniquePlaces:
+        GooglePlace[] = [];
+
+      responses.forEach(
+        place => {
+          if (!place) {
+            return;
+          }
+
+          const alreadyAdded =
+            uniquePlaces.some(
+              item =>
+                (
+                  item.id &&
+                  place.id &&
+                  item.id ===
+                    place.id
+                ) ||
+                item.displayName
+                  .toLowerCase() ===
+                  place.displayName
+                    .toLowerCase()
+            );
+
+          if (!alreadyAdded) {
+            uniquePlaces.push(
+              place
+            );
+          }
+        }
+      );
+
+      /*
+       * If fewer than three photo-backed places were returned,
+       * try additional landmark queries from the remaining regions.
+       */
+      if (
+        uniquePlaces.length <
+        3
+      ) {
+        const fallbackQueries =
+          shuffleArray(
+            WORLD_RECOMMENDATION_GROUPS
+              .flatMap(
+                group =>
+                  group.queries
+              )
+              .filter(
+                query =>
+                  !candidateQueries.some(
+                    candidate =>
+                      candidate ===
+                      query
+                  )
+              )
+          ).slice(0, 6);
+
+        for (
+          const query of
+          fallbackQueries
+        ) {
+          if (
+            uniquePlaces.length >=
+            3
+          ) {
+            break;
+          }
+
+          try {
+            const result =
+              await searchPlacesFunction({
+                query,
+              });
+
+            const candidate =
+              (
+                result.data.places ??
+                []
+              ).find(
+                place =>
+                  Boolean(
+                    place.photoUri
+                  )
+              );
+
+            if (
+              candidate &&
+              !uniquePlaces.some(
+                item =>
+                  (
+                    item.id &&
+                    candidate.id &&
+                    item.id ===
+                      candidate.id
+                  ) ||
+                  item.displayName
+                    .toLowerCase() ===
+                    candidate.displayName
+                      .toLowerCase()
+              )
+            ) {
+              uniquePlaces.push(
+                candidate
+              );
+            }
+          } catch (error) {
+            console.log(
+              'Fallback recommendation failed:',
+              query,
+              error
+            );
+          }
+        }
+      }
+
+      setRecommendedPlaces(
+        shuffleArray(
+          uniquePlaces
+        ).slice(0, 3)
+      );
+    } catch (error) {
+      console.error(
+        'Load recommended places error:',
+        error
+      );
+
+      setRecommendedPlaces([]);
+    } finally {
+      setRecommendedPlacesLoading(
+        false
+      );
+    }
+  }
 
   // ========================================================
   // PUBLISHED GUIDES / TRAVELLERS
@@ -366,17 +829,22 @@ export default function ExploreScreen() {
       searchText,
     ]);
 
-  function showTravellerGuides(
+  function openTravellerProfile(
     traveller:
       TravellerSummary
   ) {
-    setSearchText(
-      traveller.username
-    );
-
-    setActiveTab(
-      'guides'
-    );
+    router.push({
+      pathname:
+        '/user/[id]',
+      params: {
+        id:
+          traveller.userId,
+        displayName:
+          traveller.displayName,
+        username:
+          traveller.username,
+      },
+    } as any);
   }
 
   // ========================================================
@@ -643,7 +1111,60 @@ export default function ExploreScreen() {
     if (!query) {
       Alert.alert(
         'Search required',
-        'Enter a place, destination or type of attraction to search.'
+        'Enter a place or destination to search.'
+      );
+
+      return;
+    }
+
+    /*
+     * Category-only searches such as "restaurants" or
+     * "tourist attractions" are too broad for a travel app.
+     * Ask the user to include a destination before sending the
+     * request to Google Places.
+     */
+    const genericCategoryMap: Record<string, string> = {
+      attraction: 'tourist attractions',
+      attractions: 'tourist attractions',
+      'tourist attraction': 'tourist attractions',
+      'tourist attractions': 'tourist attractions',
+      restaurant: 'restaurants',
+      restaurants: 'restaurants',
+      cafe: 'cafes',
+      cafes: 'cafes',
+      café: 'cafes',
+      cafés: 'cafes',
+      shopping: 'shopping',
+    };
+
+    const normalisedQuery =
+      query
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const queryWithoutTrailingIn =
+      normalisedQuery.replace(
+        /\s+in$/,
+        ''
+      );
+
+    const genericCategory =
+      genericCategoryMap[
+        queryWithoutTrailingIn
+      ];
+
+    if (genericCategory) {
+      setSearchText(
+        `${genericCategory} in `
+      );
+
+      setPlaces([]);
+      setHasSearched(false);
+
+      Alert.alert(
+        'Add a destination',
+        `Choose where you want to search, for example "${genericCategory} in Tokyo".`
       );
 
       return;
@@ -726,12 +1247,137 @@ export default function ExploreScreen() {
   function searchCategory(
     category: string
   ) {
+    const currentQuery =
+      searchText.trim();
+
+    const categoryTerms = [
+      'tourist attractions',
+      'attractions',
+      'restaurants',
+      'cafes',
+      'shopping',
+    ];
+
+    /*
+     * If the current search already looks like a category search,
+     * keep its destination when the user switches category.
+     * Example: "restaurants in Tokyo" -> "cafes in Tokyo".
+     */
+    const existingCategory =
+      categoryTerms.find(
+        item =>
+          currentQuery
+            .toLowerCase()
+            .startsWith(
+              `${item} in `
+            )
+      );
+
+    if (existingCategory) {
+      const destination =
+        currentQuery
+          .slice(
+            existingCategory.length +
+              4
+          )
+          .trim();
+
+      if (destination) {
+        const query =
+          `${category} in ${destination}`;
+
+        setSearchText(
+          query
+        );
+
+        void searchPlaces(
+          query
+        );
+
+        return;
+      }
+    }
+
+    /*
+     * If the user typed a destination first, use it immediately.
+     * Example: "Tokyo" + Attractions ->
+     * "tourist attractions in Tokyo".
+     */
+    const currentIsCategory =
+      categoryTerms.some(
+        item =>
+          currentQuery.toLowerCase() ===
+            item ||
+          currentQuery.toLowerCase() ===
+            `${item} in`
+      );
+
+    if (
+      currentQuery &&
+      !currentIsCategory
+    ) {
+      const query =
+        `${category} in ${currentQuery}`;
+
+      setSearchText(
+        query
+      );
+
+      void searchPlaces(
+        query
+      );
+
+      return;
+    }
+
+    /*
+     * No destination yet: pre-fill the useful query template
+     * instead of making an overly broad API request.
+     */
     setSearchText(
-      category
+      `${category} in `
     );
 
-    void searchPlaces(
-      category
+    setPlaces([]);
+    setHasSearched(false);
+
+    Alert.alert(
+      'Add a destination',
+      `Enter a city or destination after "${category} in", for example Tokyo.`
+    );
+  }
+
+  function searchRecommendedPlace(
+    place: GooglePlace
+  ) {
+    /*
+     * The recommendation already came from Google Places, so there
+     * is no reason to make another network request when it is tapped.
+     * Reuse the complete place object, including its real photo.
+     */
+    const label =
+      place.formattedAddress
+        ? `${place.displayName}, ${place.formattedAddress}`
+        : place.displayName;
+
+    setSearchText(
+      place.displayName
+    );
+
+    setSearchFocused(
+      false
+    );
+
+    setPlaces([
+      place,
+    ]);
+
+    setHasSearched(
+      true
+    );
+
+    void saveRecentSearch(
+      label
     );
   }
 
@@ -1661,6 +2307,21 @@ export default function ExploreScreen() {
                   onCategoryPress={
                     searchCategory
                   }
+                  recommendedPlaces={
+                    recommendedPlaces
+                  }
+                  recommendedPlacesLoading={
+                    recommendedPlacesLoading
+                  }
+                  savedPlaceIds={
+                    savedPlaceIds
+                  }
+                  onRecommendedPlacePress={
+                    searchRecommendedPlace
+                  }
+                  onToggleSavedPlace={
+                    toggleSavedPlace
+                  }
                 />
               )}
             </>
@@ -1701,8 +2362,8 @@ export default function ExploreScreen() {
               searchText={
                 searchText
               }
-              onViewGuides={
-                showTravellerGuides
+              onViewProfile={
+                openTravellerProfile
               }
             />
           )}
@@ -2305,32 +2966,22 @@ type TabButtonProps = {
 
 function TabButton({
   title,
-  icon,
   active,
   onPress,
 }: TabButtonProps) {
   return (
     <Pressable
-      style={[
-        styles.tabButton,
-
-        active &&
-          styles.activeTabButton,
-      ]}
+      style={
+        styles.tabButton
+      }
       onPress={
         onPress
       }
+      accessibilityRole="tab"
+      accessibilityState={{
+        selected: active,
+      }}
     >
-      <Ionicons
-        name={icon}
-        size={19}
-        color={
-          active
-            ? '#1769E8'
-            : '#6B7280'
-        }
-      />
-
       <Text
         style={[
           styles.tabText,
@@ -2341,6 +2992,14 @@ function TabButton({
       >
         {title}
       </Text>
+
+      {active && (
+        <View
+          style={
+            styles.activeTabIndicator
+          }
+        />
+      )}
     </Pressable>
   );
 }
@@ -2354,34 +3013,44 @@ type PlacesSectionProps = {
     (
       category: string
     ) => void;
+
+  recommendedPlaces:
+    GooglePlace[];
+
+  recommendedPlacesLoading:
+    boolean;
+
+  savedPlaceIds:
+    Set<string>;
+
+  onRecommendedPlacePress:
+    (
+      place: GooglePlace
+    ) => void;
+
+  onToggleSavedPlace:
+    (
+      place: GooglePlace
+    ) => void;
 };
 
 function PlacesSection({
   onCategoryPress,
+  recommendedPlaces,
+  recommendedPlacesLoading,
+  savedPlaceIds,
+  onRecommendedPlacePress,
+  onToggleSavedPlace,
 }: PlacesSectionProps) {
   return (
     <>
-      <View
+      <Text
         style={
-          styles.sectionHeader
+          styles.placesSectionTitle
         }
       >
-        <Text
-          style={
-            styles.sectionTitle
-          }
-        >
-          Explore places
-        </Text>
-
-        <Text
-          style={
-            styles.sectionSubtitle
-          }
-        >
-          Find attractions, restaurants and places for your trip
-        </Text>
-      </View>
+        Popular Categories
+      </Text>
 
       <View
         style={
@@ -2390,7 +3059,7 @@ function PlacesSection({
       >
         <CategoryCard
           title="Attractions"
-          icon="camera-outline"
+          icon="business-outline"
           onPress={() =>
             onCategoryPress(
               'tourist attractions'
@@ -2429,48 +3098,207 @@ function PlacesSection({
         />
       </View>
 
-      <View
-        style={
-          styles.infoCard
-        }
+      <Text
+        style={[
+          styles.placesSectionTitle,
+          styles.recommendedTitle,
+        ]}
       >
+        Recommended Places
+      </Text>
+
+      {recommendedPlacesLoading ? (
         <View
           style={
-            styles.infoIcon
+            styles.recommendedLoading
+          }
+        >
+          <ActivityIndicator
+            size="small"
+            color="#1769E8"
+          />
+
+          <Text
+            style={
+              styles.recommendedLoadingText
+            }
+          >
+            Finding places around the world...
+          </Text>
+        </View>
+      ) : recommendedPlaces.length ===
+        0 ? (
+        <View
+          style={
+            styles.recommendedEmpty
           }
         >
           <Ionicons
-            name="search"
-            size={25}
-            color="#1769E8"
+            name="globe-outline"
+            size={24}
+            color="#9CA3AF"
           />
-        </View>
 
+          <Text
+            style={
+              styles.recommendedEmptyText
+            }
+          >
+            Recommendations are unavailable right now.
+          </Text>
+        </View>
+      ) : (
         <View
           style={
-            styles.infoContent
+            styles.recommendedList
           }
         >
-          <Text
-            style={
-              styles.infoTitle
-            }
-          >
-            Search anywhere
-          </Text>
+          {recommendedPlaces.map(
+            place => (
+              <Pressable
+                key={
+                  place.id ??
+                  `${place.displayName}-${place.formattedAddress ?? ''}`
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.recommendedPlaceRow,
+                  pressed &&
+                    styles.recommendedPlaceRowPressed,
+                ]}
+                onPress={() =>
+                  onRecommendedPlacePress(
+                    place
+                  )
+                }
+              >
+                {place.photoUri ? (
+                  <Image
+                    source={{
+                      uri:
+                        place.photoUri,
+                    }}
+                    style={
+                      styles.recommendedImage
+                    }
+                    resizeMode="cover"
+                  />
+                ) : null}
 
-          <Text
-            style={
-              styles.infoDescription
-            }
-          >
-            Try searches such as
-            Shibuya Crossing, cafes
-            in Tokyo or attractions
-            in Paris.
-          </Text>
+                <View
+                  style={
+                    styles.recommendedPlaceInfo
+                  }
+                >
+                  <Text
+                    style={
+                      styles.recommendedPlaceName
+                    }
+                    numberOfLines={1}
+                  >
+                    {
+                      place.displayName
+                    }
+                  </Text>
+
+                  {place.formattedAddress ? (
+                    <Text
+                      style={
+                        styles.recommendedPlaceLocation
+                      }
+                      numberOfLines={1}
+                    >
+                      {
+                        place.formattedAddress
+                      }
+                    </Text>
+                  ) : null}
+
+                  {place.rating !==
+                    null ? (
+                    <View
+                      style={
+                        styles.recommendedRatingRow
+                      }
+                    >
+                      <Ionicons
+                        name="star"
+                        size={13}
+                        color="#111827"
+                      />
+
+                      <Text
+                        style={
+                          styles.recommendedRatingText
+                        }
+                      >
+                        {place.rating.toFixed(
+                          1
+                        )}
+                        {place.userRatingCount !==
+                        null
+                          ? ` (${formatCompactCount(
+                              place.userRatingCount
+                            )})`
+                          : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  style={
+                    styles.recommendedBookmarkButton
+                  }
+                  hitSlop={8}
+                  onPress={event => {
+                    event.stopPropagation();
+                    onToggleSavedPlace(
+                      place
+                    );
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    savedPlaceIds.has(
+                      place.id ??
+                        encodeURIComponent(
+                          `${place.displayName}|${place.formattedAddress ?? ''}`
+                        )
+                    )
+                      ? `Remove ${place.displayName} from saved places`
+                      : `Save ${place.displayName}`
+                  }
+                >
+                  <Ionicons
+                    name={
+                      savedPlaceIds.has(
+                        place.id ??
+                          encodeURIComponent(
+                            `${place.displayName}|${place.formattedAddress ?? ''}`
+                          )
+                      )
+                        ? 'bookmark'
+                        : 'bookmark-outline'
+                    }
+                    size={23}
+                    color={
+                      savedPlaceIds.has(
+                        place.id ??
+                          encodeURIComponent(
+                            `${place.displayName}|${place.formattedAddress ?? ''}`
+                          )
+                      )
+                        ? '#1769E8'
+                        : '#374151'
+                    }
+                  />
+                </Pressable>
+              </Pressable>
+            )
+          )}
         </View>
-      </View>
+      )}
     </>
   );
 }
@@ -2991,10 +3819,25 @@ function GuideCard({
     );
 
   return (
-    <View
-      style={
-        styles.guideCard
+    <Pressable
+      style={({ pressed }) => [
+        styles.guideCard,
+        pressed && {
+          opacity: 0.92,
+        },
+      ]}
+      onPress={() =>
+        router.push({
+          pathname:
+            '/guide/[id]',
+          params: {
+            id:
+              guide.id,
+          },
+        } as any)
       }
+      accessibilityRole="button"
+      accessibilityLabel={`View ${guide.title} travel guide`}
     >
       {/* CREATOR */}
 
@@ -3240,7 +4083,7 @@ function GuideCard({
           </View>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -3253,7 +4096,7 @@ type PeopleSectionProps = {
     TravellerSummary[];
   loading: boolean;
   searchText: string;
-  onViewGuides:
+  onViewProfile:
     (
       traveller:
         TravellerSummary
@@ -3264,7 +4107,7 @@ function PeopleSection({
   travellers,
   loading,
   searchText,
-  onViewGuides,
+  onViewProfile,
 }: PeopleSectionProps) {
   if (loading) {
     return (
@@ -3373,8 +4216,8 @@ function PeopleSection({
             traveller={
               traveller
             }
-            onViewGuides={() =>
-              onViewGuides(
+            onViewProfile={() =>
+              onViewProfile(
                 traveller
               )
             }
@@ -3391,11 +4234,11 @@ function PeopleSection({
 
 function TravellerCard({
   traveller,
-  onViewGuides,
+  onViewProfile,
 }: {
   traveller:
     TravellerSummary;
-  onViewGuides:
+  onViewProfile:
     () => void;
 }) {
   const initials =
@@ -3411,8 +4254,10 @@ function TravellerCard({
           styles.travellerCardPressed,
       ]}
       onPress={
-        onViewGuides
+        onViewProfile
       }
+      accessibilityRole="button"
+      accessibilityLabel={`View ${traveller.displayName} profile`}
     >
       <View
         style={
@@ -3932,6 +4777,62 @@ function getSelectedTripDateRange(
 // STYLES
 // ==========================================================
 
+
+function shuffleArray<T>(
+  values: readonly T[]
+) {
+  const copy =
+    [...values];
+
+  for (
+    let index =
+      copy.length - 1;
+    index > 0;
+    index -= 1
+  ) {
+    const randomIndex =
+      Math.floor(
+        Math.random() *
+          (index + 1)
+      );
+
+    const temporary =
+      copy[index];
+
+    copy[index] =
+      copy[randomIndex];
+
+    copy[randomIndex] =
+      temporary;
+  }
+
+  return copy;
+}
+
+function formatCompactCount(
+  value: number
+) {
+  if (value >= 1_000_000) {
+    const millions =
+      value / 1_000_000;
+
+    return `${millions.toFixed(
+      millions >= 10 ? 0 : 1
+    )}M`;
+  }
+
+  if (value >= 1_000) {
+    const thousands =
+      value / 1_000;
+
+    return `${thousands.toFixed(
+      thousands >= 10 ? 0 : 1
+    )}K`;
+  }
+
+  return String(value);
+}
+
 const styles =
   StyleSheet.create({
     safeArea: {
@@ -4205,26 +5106,24 @@ const styles =
       marginHorizontal:
         22,
 
-      marginTop: 20,
-
-      padding: 4,
+      marginTop: 18,
 
       flexDirection:
         'row',
 
-      borderRadius: 16,
+      borderBottomWidth: 1,
+
+      borderBottomColor:
+        '#E5E7EB',
 
       backgroundColor:
-        '#F3F4F6',
+        '#FFFFFF',
     },
 
     tabButton: {
       flex: 1,
 
-      minHeight: 45,
-
-      flexDirection:
-        'row',
+      minHeight: 46,
 
       alignItems:
         'center',
@@ -4232,33 +5131,17 @@ const styles =
       justifyContent:
         'center',
 
-      gap: 6,
-
-      borderRadius: 13,
+      position:
+        'relative',
     },
 
     activeTabButton: {
-      backgroundColor:
-        '#FFFFFF',
-
-      elevation: 2,
-
-      shadowColor:
-        '#000',
-
-      shadowOpacity:
-        0.06,
-
-      shadowRadius: 4,
-
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
+      // Kept for compatibility with older references.
+      // The active state is now shown using the underline below.
     },
 
     tabText: {
-      fontSize: 13,
+      fontSize: 14,
 
       fontWeight: '600',
 
@@ -4271,12 +5154,43 @@ const styles =
       fontWeight: '700',
     },
 
+    activeTabIndicator: {
+      position:
+        'absolute',
+
+      left: 18,
+
+      right: 18,
+
+      bottom: -1,
+
+      height: 2,
+
+      borderRadius: 2,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
     // ------------------------------------------------------
     // CONTENT
     // ------------------------------------------------------
 
     content: {
       flex: 1,
+    },
+
+    sectionTitle: {
+      fontSize: 21,
+      fontWeight: '800',
+      color: '#111827',
+    },
+
+    sectionSubtitle: {
+      marginTop: 4,
+      fontSize: 13,
+      lineHeight: 18,
+      color: '#6B7280',
     },
 
     contentContainer: {
@@ -4288,26 +5202,11 @@ const styles =
       paddingBottom: 120,
     },
 
-    sectionHeader: {
-      marginBottom: 18,
-    },
-
-    sectionTitle: {
-      fontSize: 21,
-
+    placesSectionTitle: {
+      fontSize: 18,
       fontWeight: '800',
-
       color: '#111827',
-    },
-
-    sectionSubtitle: {
-      marginTop: 5,
-
-      fontSize: 13,
-
-      lineHeight: 19,
-
-      color: '#6B7280',
+      marginBottom: 14,
     },
 
     // ------------------------------------------------------
@@ -4315,120 +5214,125 @@ const styles =
     // ------------------------------------------------------
 
     categoryGrid: {
-      flexDirection:
-        'row',
-
-      flexWrap:
-        'wrap',
-
-      justifyContent:
-        'space-between',
-
-      gap: 11,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 10,
     },
 
     categoryCard: {
-      width: '48%',
-
-      minHeight: 110,
-
-      padding: 15,
-
-      borderWidth: 1,
-
-      borderColor:
-        '#E5E7EB',
-
-      borderRadius: 17,
-
-      backgroundColor:
-        '#FFFFFF',
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
     },
 
     categoryIcon: {
-      width: 43,
-
-      height: 43,
-
+      width: 54,
+      height: 54,
       borderRadius: 13,
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        '#EEF4FF',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F3F4F6',
     },
 
     categoryTitle: {
-      marginTop: 12,
-
-      fontSize: 14,
-
+      marginTop: 7,
+      fontSize: 11,
       fontWeight: '700',
-
       color: '#111827',
+      textAlign: 'center',
     },
 
     // ------------------------------------------------------
-    // INFO
+    // RECOMMENDED PLACES
     // ------------------------------------------------------
 
-    infoCard: {
-      marginTop: 24,
-
-      padding: 17,
-
-      flexDirection:
-        'row',
-
-      borderRadius: 18,
-
-      backgroundColor:
-        '#F5F8FF',
+    recommendedTitle: {
+      marginTop: 28,
     },
 
-    infoIcon: {
-      width: 49,
-
-      height: 49,
-
-      borderRadius: 15,
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        '#FFFFFF',
+    recommendedList: {
+      gap: 12,
     },
 
-    infoContent: {
-      flex: 1,
-
-      marginLeft: 13,
+    recommendedLoading: {
+      minHeight: 92,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 9,
     },
 
-    infoTitle: {
-      fontSize: 15,
-
-      fontWeight: '700',
-
-      color: '#111827',
-    },
-
-    infoDescription: {
-      marginTop: 4,
-
+    recommendedLoadingText: {
       fontSize: 12,
-
-      lineHeight: 18,
-
       color: '#6B7280',
+    },
+
+    recommendedEmpty: {
+      minHeight: 92,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+    },
+
+    recommendedEmptyText: {
+      fontSize: 12,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
+
+    recommendedPlaceRow: {
+      minHeight: 82,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    recommendedPlaceRowPressed: {
+      opacity: 0.72,
+    },
+
+    recommendedImage: {
+      width: 82,
+      height: 72,
+      borderRadius: 10,
+      backgroundColor: '#E5E7EB',
+      marginRight: 13,
+    },
+
+    recommendedPlaceInfo: {
+      flex: 1,
+      paddingRight: 8,
+    },
+
+    recommendedBookmarkButton: {
+      width: 38,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    recommendedPlaceName: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#111827',
+    },
+
+    recommendedPlaceLocation: {
+      marginTop: 3,
+      fontSize: 12,
+      color: '#6B7280',
+    },
+
+    recommendedRatingRow: {
+      marginTop: 5,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+
+    recommendedRatingText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#374151',
     },
 
     // ------------------------------------------------------

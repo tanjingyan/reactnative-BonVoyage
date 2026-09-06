@@ -336,25 +336,6 @@ export default function TripsScreen() {
             </Text>
           </View>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-
-              pressed &&
-                styles.buttonPressed,
-            ]}
-            onPress={() =>
-              router.push(
-                '/create-trip'
-              )
-            }
-          >
-            <Ionicons
-              name="add"
-              size={27}
-              color="#FFFFFF"
-            />
-          </Pressable>
         </View>
 
         {/* ================================================= */}
@@ -482,6 +463,37 @@ export default function TripsScreen() {
                 }
               />
             )}
+            ListFooterComponent={
+              <Pressable
+                style={({ pressed }) => [
+                  styles.createTripButton,
+
+                  pressed &&
+                    styles.createTripButtonPressed,
+                ]}
+                onPress={() =>
+                  router.push(
+                    '/create-trip'
+                  )
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Create new trip"
+              >
+                <Ionicons
+                  name="add"
+                  size={18}
+                  color="#FFFFFF"
+                />
+
+                <Text
+                  style={
+                    styles.createTripButtonText
+                  }
+                >
+                  CREATE NEW TRIP
+                </Text>
+              </Pressable>
+            }
           />
         )}
       </SafeAreaView>
@@ -1425,38 +1437,6 @@ const styles =
       color: '#6B7280',
     },
 
-    addButton: {
-      width: 46,
-      height: 46,
-
-      marginTop: 3,
-
-      borderRadius: 23,
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        '#1769E8',
-
-      shadowColor:
-        '#1769E8',
-
-      shadowOpacity: 0.18,
-
-      shadowRadius: 7,
-
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-
-      elevation: 4,
-    },
-
     buttonPressed: {
       opacity: 0.75,
     },
@@ -1560,6 +1540,63 @@ const styles =
       paddingBottom: 120,
 
       gap: 12,
+    },
+
+    createTripButton: {
+      minHeight: 48,
+
+      marginTop: 8,
+      marginBottom: 18,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius: 10,
+
+      backgroundColor:
+        '#1769E8',
+
+      shadowColor:
+        '#1769E8',
+
+      shadowOpacity: 0.14,
+
+      shadowRadius: 6,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 3,
+    },
+
+    createTripButtonPressed: {
+      opacity: 0.82,
+
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+
+    createTripButtonText: {
+      marginLeft: 6,
+
+      fontSize: 12,
+
+      fontWeight: '800',
+
+      letterSpacing: 0.35,
+
+      color: '#FFFFFF',
     },
 
     // ======================================================
