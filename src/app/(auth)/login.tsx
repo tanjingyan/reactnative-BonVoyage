@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import {
   Alert,
   Pressable,
@@ -8,19 +9,53 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  router,
+} from 'expo-router';
 
-import { auth } from '@/firebase/firebaseConfig';
+import {
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
+
+import {
+  auth,
+} from '@/firebase/firebaseConfig';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [
+    email,
+    setEmail,
+  ] = useState('');
+
+  const [
+    password,
+    setPassword,
+  ] = useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  // ========================================================
+  // LOGIN
+  // ========================================================
 
   async function handleLogin() {
-    if (!email.trim() || !password) {
-      Alert.alert('Error', 'Please enter your email and password.');
+    const cleanedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    if (
+      !cleanedEmail ||
+      !password
+    ) {
+      Alert.alert(
+        'Error',
+        'Please enter your email and password.'
+      );
+
       return;
     }
 
@@ -29,69 +64,174 @@ export default function LoginScreen() {
 
       await signInWithEmailAndPassword(
         auth,
-        email.trim(),
+        cleanedEmail,
         password
       );
 
-      // No router.replace() needed.
-      // onAuthStateChanged will detect the login and unlock (tabs).
-
+      /*
+       * DO NOT router.replace('/') here.
+       *
+       * Firebase Auth updates the user in AuthProvider.
+       * src/app/_layout.tsx then:
+       *
+       * 1. disables the logged-out routes
+       * 2. enables the logged-in routes
+       * 3. takes the user into /(tabs)
+       */
     } catch (error: any) {
-      console.log(error);
+      console.log(
+        'Login error:',
+        error
+      );
 
       if (
-        error.code === 'auth/invalid-credential' ||
-        error.code === 'auth/wrong-password' ||
-        error.code === 'auth/user-not-found'
+        error.code ===
+          'auth/invalid-credential' ||
+        error.code ===
+          'auth/wrong-password' ||
+        error.code ===
+          'auth/user-not-found'
       ) {
-        Alert.alert('Login Failed', 'Incorrect email or password.');
-      } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Login Failed', 'Please enter a valid email address.');
+        Alert.alert(
+          'Login Failed',
+          'Incorrect email or password.'
+        );
+      } else if (
+        error.code ===
+        'auth/invalid-email'
+      ) {
+        Alert.alert(
+          'Login Failed',
+          'Please enter a valid email address.'
+        );
+      } else if (
+        error.code ===
+        'auth/too-many-requests'
+      ) {
+        Alert.alert(
+          'Login Failed',
+          'Too many login attempts. Please try again later.'
+        );
       } else {
-        Alert.alert('Login Failed', 'Unable to login. Please try again.');
+        Alert.alert(
+          'Login Failed',
+          'Unable to login. Please try again.'
+        );
       }
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back!</Text>
+  // ========================================================
+  // UI
+  // ========================================================
 
-      <Text style={styles.subtitle}>
+  return (
+    <View
+      style={
+        styles.container
+      }
+    >
+      <Text
+        style={
+          styles.title
+        }
+      >
+        Welcome Back!
+      </Text>
+
+      <Text
+        style={
+          styles.subtitle
+        }
+      >
         Login to continue your journey
       </Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
+      {/* EMAIL */}
 
       <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
+        style={
+          styles.input
+        }
+        placeholder="Email"
+        placeholderTextColor="#9CA3AF"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        value={
+          email
+        }
+        onChangeText={
+          setEmail
+        }
       />
+
+      {/* PASSWORD */}
+
+      <TextInput
+        style={
+          styles.input
+        }
+        placeholder="Password"
+        placeholderTextColor="#9CA3AF"
+        secureTextEntry
+        value={
+          password
+        }
+        onChangeText={
+          setPassword
+        }
+        onSubmitEditing={() =>
+          void handleLogin()
+        }
+      />
+
+      {/* LOGIN BUTTON */}
 
       <Pressable
-        style={styles.button}
-        onPress={handleLogin}
-        disabled={loading}
+        style={[
+          styles.button,
+
+          loading &&
+            styles.buttonDisabled,
+        ]}
+        onPress={() =>
+          void handleLogin()
+        }
+        disabled={
+          loading
+        }
       >
-        <Text style={styles.buttonText}>
-          {loading ? 'Logging in...' : 'Login'}
+        <Text
+          style={
+            styles.buttonText
+          }
+        >
+          {loading
+            ? 'Logging in...'
+            : 'Login'}
         </Text>
       </Pressable>
 
-      <Pressable onPress={() => router.push('/register')}>
-        <Text style={styles.registerText}>
+      {/* REGISTER */}
+
+      <Pressable
+        disabled={
+          loading
+        }
+        onPress={() =>
+          router.push(
+            '/register'
+          )
+        }
+      >
+        <Text
+          style={
+            styles.registerText
+          }
+        >
           Don't have an account? Sign Up
         </Text>
       </Pressable>
@@ -99,54 +239,125 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    backgroundColor: '#FFFFFF',
-  },
+// ==========================================================
+// STYLES
+// ==========================================================
 
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
 
-  subtitle: {
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 30,
-    color: '#6B7280',
-  },
+      justifyContent:
+        'center',
 
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 14,
-    fontSize: 16,
-  },
+      paddingHorizontal:
+        28,
 
-  button: {
-    backgroundColor: '#1769E8',
-    paddingVertical: 15,
-    borderRadius: 12,
-    marginTop: 8,
-  },
+      backgroundColor:
+        '#FFFFFF',
+    },
 
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+    title: {
+      fontSize: 30,
 
-  registerText: {
-    textAlign: 'center',
-    marginTop: 20,
-    color: '#1769E8',
-  },
-});
+      fontWeight:
+        '700',
+
+      textAlign:
+        'center',
+
+      color:
+        '#111827',
+    },
+
+    subtitle: {
+      textAlign:
+        'center',
+
+      marginTop:
+        8,
+
+      marginBottom:
+        30,
+
+      color:
+        '#6B7280',
+    },
+
+    input: {
+      minHeight:
+        52,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius:
+        12,
+
+      paddingHorizontal:
+        16,
+
+      paddingVertical:
+        14,
+
+      marginBottom:
+        14,
+
+      fontSize:
+        16,
+
+      color:
+        '#111827',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    button: {
+      backgroundColor:
+        '#1769E8',
+
+      paddingVertical:
+        15,
+
+      borderRadius:
+        12,
+
+      marginTop:
+        8,
+    },
+
+    buttonDisabled: {
+      opacity:
+        0.6,
+    },
+
+    buttonText: {
+      color:
+        '#FFFFFF',
+
+      textAlign:
+        'center',
+
+      fontSize:
+        16,
+
+      fontWeight:
+        '600',
+    },
+
+    registerText: {
+      textAlign:
+        'center',
+
+      marginTop:
+        20,
+
+      color:
+        '#1769E8',
+    },
+  });

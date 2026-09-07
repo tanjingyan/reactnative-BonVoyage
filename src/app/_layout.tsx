@@ -1,28 +1,97 @@
 import { Stack } from 'expo-router';
 
-import { AuthProvider, useAuth } from '@/hooks/use-Auth';
+import {
+  AuthProvider,
+  useAuth,
+} from '@/hooks/use-Auth';
 
 function RootNavigator() {
-  const { user, loading } = useAuth();
+  const {
+    user,
+    loading,
+  } = useAuth();
 
+  // Wait until Firebase has checked whether
+  // there is already a logged-in user.
   if (loading) {
     return null;
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!user}>
-        <Stack.Screen name="(auth)" />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      {/* ===================================================== */}
+      {/* LOGGED OUT ROUTES                                    */}
+      {/* ===================================================== */}
+
+      <Stack.Protected
+        guard={!user}
+      >
+        {/* Welcome page */}
+        <Stack.Screen
+          name="index"
+        />
+
+        {/* Login + Register */}
+        <Stack.Screen
+          name="(auth)"
+        />
       </Stack.Protected>
 
-      <Stack.Protected guard={!!user}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="create-trip" />
-        <Stack.Screen name="trip/[id]" />
-        <Stack.Screen name="trip/[id]/add-activity" />
-        <Stack.Screen name="trip/[id]/activity/[activityId]" />
-        <Stack.Screen name="trip/[id]/map" />
-        <Stack.Screen name="create-guide" />
+      {/* ===================================================== */}
+      {/* LOGGED IN ROUTES                                     */}
+      {/* ===================================================== */}
+
+      <Stack.Protected
+        guard={!!user}
+      >
+        {/* Main application */}
+        <Stack.Screen
+          name="(tabs)"
+        />
+
+        {/* Create Trip */}
+        <Stack.Screen
+          name="create-trip"
+        />
+
+        {/* Trip Details */}
+        <Stack.Screen
+          name="trip/[id]"
+        />
+
+        {/* Add Activity */}
+        <Stack.Screen
+          name="trip/[id]/add-activity"
+        />
+
+        {/* Activity Details */}
+        <Stack.Screen
+          name="trip/[id]/activity/[activityId]"
+        />
+
+        {/* Trip Map */}
+        <Stack.Screen
+          name="trip/[id]/map"
+        />
+
+        {/* Create Guide */}
+        <Stack.Screen
+          name="create-guide"
+        />
+
+        {/* Guide Details */}
+        <Stack.Screen
+          name="guide/[id]"
+        />
+
+        {/* Public Traveller Profile */}
+        <Stack.Screen
+          name="user/[id]"
+        />
       </Stack.Protected>
     </Stack>
   );

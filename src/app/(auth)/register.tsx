@@ -9,7 +9,9 @@ import {
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import {
+  router,
+} from 'expo-router';
 
 import {
   createUserWithEmailAndPassword,
@@ -128,17 +130,11 @@ export default function RegisterScreen() {
     }
 
     /*
-     * Allowed:
+     * Allowed examples:
      *
      * jingyan
      * jing_yan
      * traveller123
-     *
-     * Not allowed:
-     *
-     * jing yan
-     * jing.yan
-     * jing-yan
      */
 
     const usernamePattern =
@@ -226,16 +222,17 @@ export default function RegisterScreen() {
         userCredential.user;
 
       // ----------------------------------------------------
-      // RESERVE USERNAME
+      // FIRESTORE REFERENCES
       // ----------------------------------------------------
-      //
-      // usernames/jingyan
-      //
-      // The username itself becomes the document ID.
-      //
-      // Firestore transaction makes this atomic.
-      //
-      // ----------------------------------------------------
+
+      /*
+       * Example:
+       *
+       * usernames/jingyan
+       *
+       * The lowercase username itself is used as
+       * the document ID so usernames remain unique.
+       */
 
       const usernameRef =
         doc(
@@ -251,15 +248,21 @@ export default function RegisterScreen() {
           createdUser.uid
         );
 
+      // ----------------------------------------------------
+      // RESERVE USERNAME + CREATE USER PROFILE
+      // ----------------------------------------------------
+
       await runTransaction(
         db,
+
         async transaction => {
           const usernameDocument =
             await transaction.get(
               usernameRef
             );
 
-          // Username already belongs to someone.
+          // Username already exists.
+
           if (
             usernameDocument.exists()
           ) {
@@ -287,7 +290,7 @@ export default function RegisterScreen() {
           );
 
           // ----------------------------------------------
-          // CREATE PRIVATE USER PROFILE
+          // CREATE PRIVATE PROFILE
           // ----------------------------------------------
 
           transaction.set(
@@ -305,7 +308,19 @@ export default function RegisterScreen() {
               email:
                 cleanedEmail,
 
+              bio:
+                '',
+
+              location:
+                '',
+
+              photoURL:
+                null,
+
               createdAt:
+                serverTimestamp(),
+
+              updatedAt:
                 serverTimestamp(),
             }
           );
@@ -328,19 +343,19 @@ export default function RegisterScreen() {
       // SUCCESS
       // ----------------------------------------------------
 
+      /*
+       * Do NOT router.replace('/') here.
+       *
+       * createUserWithEmailAndPassword automatically
+       * signs the new user in.
+       *
+       * AuthProvider will detect that authentication state
+       * and src/app/_layout.tsx will enable /(tabs).
+       */
+
       Alert.alert(
         'Account Created',
-        `Welcome to BonVoyage, ${cleanedName}!`,
-        [
-          {
-            text: 'Continue',
-
-            onPress: () =>
-              router.replace(
-                '/'
-              ),
-          },
-        ]
+        `Welcome to BonVoyage, ${cleanedName}!`
       );
     } catch (error: any) {
       console.log(
@@ -357,11 +372,11 @@ export default function RegisterScreen() {
         'USERNAME_TAKEN'
       ) {
         /*
-         * Firebase Auth account was created before we could
-         * reserve the username.
+         * Firebase Auth account is created before the
+         * username transaction.
          *
-         * Delete that temporary account so the user can
-         * choose another username and register normally.
+         * If the username is unavailable, remove the
+         * temporary Firebase Auth account.
          */
 
         if (
@@ -390,7 +405,7 @@ export default function RegisterScreen() {
       }
 
       // ----------------------------------------------------
-      // AUTH ERRORS
+      // EMAIL ALREADY USED
       // ----------------------------------------------------
 
       if (
@@ -401,7 +416,15 @@ export default function RegisterScreen() {
           'Email Already Registered',
           'An account already exists with this email address.'
         );
-      } else if (
+
+        return;
+      }
+
+      // ----------------------------------------------------
+      // INVALID EMAIL
+      // ----------------------------------------------------
+
+      if (
         error.code ===
         'auth/invalid-email'
       ) {
@@ -409,7 +432,15 @@ export default function RegisterScreen() {
           'Invalid Email',
           'Please enter a valid email address.'
         );
-      } else if (
+
+        return;
+      }
+
+      // ----------------------------------------------------
+      // WEAK PASSWORD
+      // ----------------------------------------------------
+
+      if (
         error.code ===
         'auth/weak-password'
       ) {
@@ -417,34 +448,40 @@ export default function RegisterScreen() {
           'Weak Password',
           'Please choose a stronger password.'
         );
-      } else {
-        /*
-         * If registration failed after Firebase Auth was
-         * created, clean up the temporary account.
-         */
 
-        if (
-          createdUser
-        ) {
-          try {
-            await deleteUser(
-              createdUser
-            );
-          } catch (
-            deleteError
-          ) {
-            console.log(
-              'Temporary auth cleanup error:',
-              deleteError
-            );
-          }
-        }
-
-        Alert.alert(
-          'Registration Failed',
-          'Unable to create your BonVoyage account. Please try again.'
-        );
+        return;
       }
+
+      // ----------------------------------------------------
+      // OTHER REGISTRATION ERROR
+      // ----------------------------------------------------
+
+      /*
+       * If Firebase Auth succeeded but Firestore/profile
+       * creation failed, remove the temporary account.
+       */
+
+      if (
+        createdUser
+      ) {
+        try {
+          await deleteUser(
+            createdUser
+          );
+        } catch (
+          deleteError
+        ) {
+          console.log(
+            'Temporary auth cleanup error:',
+            deleteError
+          );
+        }
+      }
+
+      Alert.alert(
+        'Registration Failed',
+        'Unable to create your BonVoyage account. Please try again.'
+      );
     } finally {
       setLoading(
         false
@@ -645,6 +682,9 @@ export default function RegisterScreen() {
         onChangeText={
           setConfirmPassword
         }
+        onSubmitEditing={() =>
+          void handleRegister()
+        }
       />
 
       {/* =================================================== */}
@@ -658,8 +698,8 @@ export default function RegisterScreen() {
           loading &&
             styles.buttonDisabled,
         ]}
-        onPress={
-          handleRegister
+        onPress={() =>
+          void handleRegister()
         }
         disabled={
           loading
@@ -681,6 +721,9 @@ export default function RegisterScreen() {
       {/* =================================================== */}
 
       <Pressable
+        disabled={
+          loading
+        }
         onPress={() =>
           router.push(
             '/login'
@@ -719,62 +762,79 @@ const styles =
     },
 
     title: {
-      fontSize: 30,
+      fontSize:
+        30,
 
-      fontWeight: '700',
+      fontWeight:
+        '700',
 
       textAlign:
         'center',
 
-      color: '#111827',
+      color:
+        '#111827',
     },
 
     subtitle: {
-      marginTop: 8,
+      marginTop:
+        8,
 
-      marginBottom: 26,
+      marginBottom:
+        26,
 
       textAlign:
         'center',
 
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
     label: {
-      marginBottom: 7,
+      marginBottom:
+        7,
 
-      fontSize: 13,
+      fontSize:
+        13,
 
-      fontWeight: '600',
+      fontWeight:
+        '600',
 
-      color: '#374151',
+      color:
+        '#374151',
     },
 
     input: {
-      minHeight: 52,
+      minHeight:
+        52,
 
       paddingHorizontal:
         16,
 
-      marginBottom: 14,
+      marginBottom:
+        14,
 
-      borderWidth: 1,
+      borderWidth:
+        1,
 
       borderColor:
         '#D1D5DB',
 
-      borderRadius: 12,
+      borderRadius:
+        12,
 
-      fontSize: 15,
+      fontSize:
+        15,
 
-      color: '#111827',
+      color:
+        '#111827',
 
       backgroundColor:
         '#FFFFFF',
     },
 
     usernameContainer: {
-      minHeight: 52,
+      minHeight:
+        52,
 
       paddingHorizontal:
         16,
@@ -785,77 +845,99 @@ const styles =
       alignItems:
         'center',
 
-      borderWidth: 1,
+      borderWidth:
+        1,
 
       borderColor:
         '#D1D5DB',
 
-      borderRadius: 12,
+      borderRadius:
+        12,
 
       backgroundColor:
         '#FFFFFF',
     },
 
     usernamePrefix: {
-      marginRight: 3,
+      marginRight:
+        3,
 
-      fontSize: 16,
+      fontSize:
+        16,
 
-      fontWeight: '600',
+      fontWeight:
+        '600',
 
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
     usernameInput: {
-      flex: 1,
+      flex:
+        1,
 
-      fontSize: 15,
+      fontSize:
+        15,
 
-      color: '#111827',
+      color:
+        '#111827',
     },
 
     usernameHint: {
-      marginTop: 5,
+      marginTop:
+        5,
 
-      marginBottom: 14,
+      marginBottom:
+        14,
 
-      fontSize: 11,
+      fontSize:
+        11,
 
-      color: '#9CA3AF',
+      color:
+        '#9CA3AF',
     },
 
     button: {
-      marginTop: 8,
+      marginTop:
+        8,
 
-      paddingVertical: 15,
+      paddingVertical:
+        15,
 
-      borderRadius: 12,
+      borderRadius:
+        12,
 
       backgroundColor:
         '#1769E8',
     },
 
     buttonDisabled: {
-      opacity: 0.6,
+      opacity:
+        0.6,
     },
 
     buttonText: {
       textAlign:
         'center',
 
-      fontSize: 16,
+      fontSize:
+        16,
 
-      fontWeight: '600',
+      fontWeight:
+        '600',
 
-      color: '#FFFFFF',
+      color:
+        '#FFFFFF',
     },
 
     loginText: {
-      marginTop: 20,
+      marginTop:
+        20,
 
       textAlign:
         'center',
 
-      color: '#1769E8',
+      color:
+        '#1769E8',
     },
   });

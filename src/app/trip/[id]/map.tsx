@@ -1,12 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
+  serverTimestamp,
 } from 'firebase/firestore';
 
 import { httpsCallable } from 'firebase/functions';
@@ -22,10 +27,12 @@ import {
   Alert,
   Image,
   Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -40,6 +47,7 @@ import MapView, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  auth,
   db,
   functions,
 } from '../../../firebase/firebaseConfig';
@@ -64,6 +72,12 @@ type Activity = {
   date?: string;
   time?: string;
   notes?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  source?: string | null;
+  googlePlaceId?: string | null;
+  googleMapsUri?: string | null;
+  photoUri?: string | null;
 };
 
 type MapLocation = {
@@ -121,6 +135,10 @@ type GooglePlace = {
 type SearchPlaceResponse = {
   found: boolean;
   place?: GooglePlace;
+};
+
+type SearchPlacesResponse = {
+  places: GooglePlace[];
 };
 
 // ==========================================================
@@ -210,6 +228,45 @@ export default function TripMapScreen() {
       null
     );
 
+  const [
+    addModalVisible,
+    setAddModalVisible,
+  ] = useState(false);
+
+  const [
+    addingToItinerary,
+    setAddingToItinerary,
+  ] = useState(false);
+
+  const [
+    activityDate,
+    setActivityDate,
+  ] = useState(new Date());
+
+  const [
+    activityTime,
+    setActivityTime,
+  ] = useState(() => {
+    const defaultTime = new Date();
+    defaultTime.setHours(10, 0, 0, 0);
+    return defaultTime;
+  });
+
+  const [
+    activityNotes,
+    setActivityNotes,
+  ] = useState('');
+
+  const [
+    showDatePicker,
+    setShowDatePicker,
+  ] = useState(false);
+
+  const [
+    showTimePicker,
+    setShowTimePicker,
+  ] = useState(false);
+
   // ========================================================
   // LOAD TRIP
   // ========================================================
@@ -247,6 +304,96 @@ export default function TripMapScreen() {
   // LOAD TRIP MAP
   // ========================================================
 
+  async function findDestinationPlace(
+    destination: string
+  ) {
+    const searchPlaces =
+      httpsCallable<
+        {
+          query: string;
+        },
+        SearchPlacesResponse
+      >(
+        functions,
+        'searchPlaces'
+      );
+
+    const result =
+      await searchPlaces({
+        query: destination,
+      });
+
+    return (
+      result.data.places ?? []
+    ).find(
+      place =>
+        typeof place.latitude ===
+          'number' &&
+        typeof place.longitude ===
+          'number'
+    ) ?? null;
+  }
+
+  async function findActivityPlace(
+    activity: Activity,
+    tripData: Trip,
+    destinationCoordinates: {
+      latitude: number;
+      longitude: number;
+    }
+  ) {
+    const searchPlace =
+      httpsCallable<
+        {
+          query: string;
+          latitude: number;
+          longitude: number;
+        },
+        SearchPlaceResponse
+      >(
+        functions,
+        'searchPlace'
+      );
+
+    const query = [
+      activity.name,
+      activity.location,
+      tripData.destination,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    try {
+      const result =
+        await searchPlace({
+          query,
+          latitude:
+            destinationCoordinates.latitude,
+          longitude:
+            destinationCoordinates.longitude,
+        });
+
+      if (
+        result.data.found &&
+        result.data.place &&
+        typeof result.data.place
+          .latitude === 'number' &&
+        typeof result.data.place
+          .longitude === 'number'
+      ) {
+        return result.data.place;
+      }
+    } catch (error) {
+      console.log(
+        'Activity Google Places lookup failed:',
+        activity.name,
+        error
+      );
+    }
+
+    return null;
+  }
+
   async function loadTripMap() {
     try {
       setLoading(true);
@@ -276,7 +423,6 @@ export default function TripMapScreen() {
 
       const tripData: Trip = {
         id: tripSnapshot.id,
-
         ...(tripSnapshot.data() as Omit<
           Trip,
           'id'
@@ -286,36 +432,24 @@ export default function TripMapScreen() {
       setTrip(tripData);
 
       // ----------------------------------------------------
-      // LOCATION PERMISSION
+      // DESTINATION COORDINATES
+      // ----------------------------------------------------
+      // Use the existing Google Places Firebase Function
+      // instead of Android's native geocoder. This avoids
+      // ExpoLocation.geocodeAsync DEADLINE_EXCEEDED errors.
       // ----------------------------------------------------
 
-      const permission =
-        await Location.requestForegroundPermissionsAsync();
-
-      if (
-        permission.status !==
-        'granted'
-      ) {
-        Alert.alert(
-          'Location permission required',
-          'BonVoyage needs location permission to locate your trip and itinerary places.'
-        );
-
-        return;
-      }
-
-      // ----------------------------------------------------
-      // GEOCODE DESTINATION
-      // ----------------------------------------------------
-
-      const destinationResults =
-        await Location.geocodeAsync(
+      const destinationPlace =
+        await findDestinationPlace(
           tripData.destination
         );
 
       if (
-        destinationResults.length ===
-        0
+        !destinationPlace ||
+        typeof destinationPlace.latitude !==
+          'number' ||
+        typeof destinationPlace.longitude !==
+          'number'
       ) {
         Alert.alert(
           'Location not found',
@@ -325,45 +459,35 @@ export default function TripMapScreen() {
         return;
       }
 
-      const destinationCoordinates =
-        destinationResults[0];
+      const destinationCoordinates = {
+        latitude:
+          destinationPlace.latitude,
+        longitude:
+          destinationPlace.longitude,
+      };
 
       const destinationMarker:
         MapLocation = {
         id: 'trip-destination',
-
         name:
           tripData.destination,
-
         subtitle:
+          destinationPlace.formattedAddress ||
           'Trip destination',
-
         latitude:
           destinationCoordinates.latitude,
-
         longitude:
           destinationCoordinates.longitude,
-
-        type:
-          'destination',
+        type: 'destination',
       };
-
-      // ----------------------------------------------------
-      // STARTING MAP REGION
-      // ----------------------------------------------------
 
       const region: Region = {
         latitude:
           destinationCoordinates.latitude,
-
         longitude:
           destinationCoordinates.longitude,
-
-        latitudeDelta:
-          0.12,
-
-        longitudeDelta:
-          0.12,
+        latitudeDelta: 0.12,
+        longitudeDelta: 0.12,
       };
 
       setDestinationRegion(
@@ -390,10 +514,8 @@ export default function TripMapScreen() {
       const activities:
         Activity[] =
         activitiesSnapshot.docs.map(
-          (activityDoc) => ({
-            id:
-              activityDoc.id,
-
+          activityDoc => ({
+            id: activityDoc.id,
             ...(activityDoc.data() as Omit<
               Activity,
               'id'
@@ -402,7 +524,12 @@ export default function TripMapScreen() {
         );
 
       // ----------------------------------------------------
-      // GEOCODE ACTIVITIES
+      // BUILD ACTIVITY MARKERS
+      // ----------------------------------------------------
+      // Activities added through Google Places already save
+      // latitude/longitude. Use those coordinates directly.
+      // Older/manual activities are resolved through Google
+      // Places as a fallback.
       // ----------------------------------------------------
 
       const activityMarkers:
@@ -411,82 +538,69 @@ export default function TripMapScreen() {
       for (
         const activity of activities
       ) {
-        try {
-          if (!activity.location) {
-            continue;
-          }
-
-          /*
-            Example:
-
-            Shibuya, Tokyo
-
-            Adding the destination gives the geocoder
-            more context.
-          */
-
-          const searchLocation =
-            `${activity.location}, ${tripData.destination}`;
-
-          const geocodeResults =
-            await Location.geocodeAsync(
-              searchLocation
-            );
-
-          if (
-            geocodeResults.length ===
-            0
-          ) {
-            console.log(
-              'Could not geocode:',
-              searchLocation
-            );
-
-            continue;
-          }
-
-          activityMarkers.push({
-            id:
-              activity.id,
-
-            name:
-              activity.name,
-
-            subtitle:
-              activity.location,
-
-            latitude:
-              geocodeResults[0]
-                .latitude,
-
-            longitude:
-              geocodeResults[0]
-                .longitude,
-
-            type:
-              'activity',
-
-            date:
-              activity.date,
-
-            time:
-              activity.time,
-
-            notes:
-              activity.notes,
-          });
-        } catch (error) {
-          console.log(
-            'Activity geocoding error:',
-            activity.name,
-            error
-          );
+        if (!activity.location) {
+          continue;
         }
-      }
 
-      // ----------------------------------------------------
-      // SET MARKERS
-      // ----------------------------------------------------
+        let latitude:
+          number | null =
+          typeof activity.latitude ===
+            'number'
+            ? activity.latitude
+            : null;
+
+        let longitude:
+          number | null =
+          typeof activity.longitude ===
+            'number'
+            ? activity.longitude
+            : null;
+
+        if (
+          latitude === null ||
+          longitude === null
+        ) {
+          const resolvedPlace =
+            await findActivityPlace(
+              activity,
+              tripData,
+              destinationCoordinates
+            );
+
+          latitude =
+            resolvedPlace?.latitude ??
+            null;
+
+          longitude =
+            resolvedPlace?.longitude ??
+            null;
+        }
+
+        if (
+          latitude === null ||
+          longitude === null
+        ) {
+          console.log(
+            'Could not locate activity:',
+            activity.name
+          );
+
+          continue;
+        }
+
+        activityMarkers.push({
+          id: activity.id,
+          name: activity.name,
+          subtitle:
+            activity.location,
+          latitude,
+          longitude,
+          type: 'activity',
+          date: activity.date,
+          time: activity.time,
+          notes: activity.notes,
+        });
+      }
 
       const allLocations = [
         destinationMarker,
@@ -497,17 +611,12 @@ export default function TripMapScreen() {
         allLocations
       );
 
-      // ----------------------------------------------------
-      // SHOW DESTINATION FIRST
-      // ----------------------------------------------------
-
       setSelectedLocation(
         destinationMarker
       );
 
-      void loadGooglePlace(
-        destinationMarker,
-        tripData
+      setGooglePlace(
+        destinationPlace
       );
     } catch (error) {
       console.error(
@@ -1438,6 +1547,276 @@ export default function TripMapScreen() {
   }
 
   // ========================================================
+  // ADD MAP PLACE TO ITINERARY
+  // ========================================================
+
+  function openAddToItinerary() {
+    if (
+      !selectedLocation ||
+      selectedLocation.type !==
+        'map'
+    ) {
+      return;
+    }
+
+    if (trip?.startDate) {
+      setActivityDate(
+        parseStoredDate(
+          trip.startDate
+        )
+      );
+    } else {
+      setActivityDate(
+        new Date()
+      );
+    }
+
+    const defaultTime =
+      new Date();
+
+    defaultTime.setHours(
+      10,
+      0,
+      0,
+      0
+    );
+
+    setActivityTime(
+      defaultTime
+    );
+
+    setActivityNotes('');
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+    setAddModalVisible(true);
+  }
+
+  function handleActivityDateChange(
+    event: DateTimePickerEvent,
+    selectedDate?: Date
+  ) {
+    setShowDatePicker(false);
+
+    if (
+      event.type ===
+        'dismissed' ||
+      !selectedDate
+    ) {
+      return;
+    }
+
+    setActivityDate(
+      selectedDate
+    );
+  }
+
+  function handleActivityTimeChange(
+    event: DateTimePickerEvent,
+    selectedTime?: Date
+  ) {
+    setShowTimePicker(false);
+
+    if (
+      event.type ===
+        'dismissed' ||
+      !selectedTime
+    ) {
+      return;
+    }
+
+    setActivityTime(
+      selectedTime
+    );
+  }
+
+  async function addSelectedPlaceToItinerary() {
+    if (
+      !trip ||
+      !selectedLocation ||
+      selectedLocation.type !==
+        'map'
+    ) {
+      return;
+    }
+
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      Alert.alert(
+        'Login required',
+        'Please log in again before adding an activity.'
+      );
+
+      return;
+    }
+
+    if (
+      trip.startDate &&
+      trip.endDate
+    ) {
+      const tripStart =
+        startOfDay(
+          parseStoredDate(
+            trip.startDate
+          )
+        );
+
+      const tripEnd =
+        startOfDay(
+          parseStoredDate(
+            trip.endDate
+          )
+        );
+
+      const chosenDate =
+        startOfDay(
+          activityDate
+        );
+
+      if (
+        chosenDate <
+          tripStart ||
+        chosenDate >
+          tripEnd
+      ) {
+        Alert.alert(
+          'Date outside trip',
+          `Choose a date between ${formatDate(
+            trip.startDate
+          )} and ${formatDate(
+            trip.endDate
+          )}.`
+        );
+
+        return;
+      }
+    }
+
+    const latitude =
+      googlePlace?.latitude ??
+      selectedLocation.latitude;
+
+    const longitude =
+      googlePlace?.longitude ??
+      selectedLocation.longitude;
+
+    const name =
+      googlePlace?.displayName ||
+      selectedLocation.name;
+
+    const location =
+      googlePlace?.formattedAddress ||
+      selectedLocation.subtitle ||
+      name;
+
+    try {
+      setAddingToItinerary(
+        true
+      );
+
+      const activityRef =
+        await addDoc(
+          collection(
+            db,
+            'trips',
+            trip.id,
+            'activities'
+          ),
+          {
+            userId:
+              user.uid,
+            name,
+            location,
+            date:
+              formatFirestoreDate(
+                activityDate
+              ),
+            time:
+              formatFirestoreTime(
+                activityTime
+              ),
+            notes:
+              activityNotes.trim(),
+            createdAt:
+              serverTimestamp(),
+            source:
+              'google_places',
+            googlePlaceId:
+              googlePlace?.id ??
+              null,
+            latitude,
+            longitude,
+            googleMapsUri:
+              googlePlace
+                ?.googleMapsUri ??
+              null,
+            photoUri:
+              googlePlace
+                ?.photoUri ??
+              null,
+          }
+        );
+
+      const newMarker:
+        MapLocation = {
+        id: activityRef.id,
+        name,
+        subtitle: location,
+        latitude,
+        longitude,
+        type: 'activity',
+        date:
+          formatFirestoreDate(
+            activityDate
+          ),
+        time:
+          formatFirestoreTime(
+            activityTime
+          ),
+        notes:
+          activityNotes.trim(),
+      };
+
+      setMapLocations(
+        current => [
+          ...current,
+          newMarker,
+        ]
+      );
+
+      setSelectedLocation(
+        newMarker
+      );
+
+      setAddModalVisible(
+        false
+      );
+
+      setActivityNotes('');
+
+      Alert.alert(
+        'Added to itinerary',
+        `${name} was added to ${trip.title}.`
+      );
+    } catch (error) {
+      console.error(
+        'Add map place to itinerary error:',
+        error
+      );
+
+      Alert.alert(
+        'Unable to add place',
+        'BonVoyage could not add this place to your itinerary. Please try again.'
+      );
+    } finally {
+      setAddingToItinerary(
+        false
+      );
+    }
+  }
+
+  // ========================================================
   // PHOTO ATTRIBUTION
   // ========================================================
 
@@ -2312,6 +2691,36 @@ export default function TripMapScreen() {
             </Pressable>
           </View>
 
+          {selectedLocation.type ===
+            'map' && (
+            <Pressable
+              style={
+                styles.addToItineraryButton
+              }
+              disabled={
+                placeLoading ||
+                addingToItinerary
+              }
+              onPress={
+                openAddToItinerary
+              }
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.addToItineraryText
+                }
+              >
+                Add to itinerary
+              </Text>
+            </Pressable>
+          )}
+
           {/* ============================================= */}
           {/* GOOGLE ATTRIBUTION                            */}
           {/* ============================================= */}
@@ -2362,6 +2771,235 @@ export default function TripMapScreen() {
           )}
         </View>
       )}
+
+      <Modal
+        visible={
+          addModalVisible
+        }
+        transparent
+        animationType="slide"
+        onRequestClose={() =>
+          setAddModalVisible(
+            false
+          )
+        }
+      >
+        <View
+          style={
+            styles.modalBackdrop
+          }
+        >
+          <View
+            style={
+              styles.addModalCard
+            }
+          >
+            <View
+              style={
+                styles.addModalHeader
+              }
+            >
+              <View
+                style={{ flex: 1 }}
+              >
+                <Text
+                  style={
+                    styles.addModalTitle
+                  }
+                >
+                  Add to itinerary
+                </Text>
+
+                <Text
+                  style={
+                    styles.addModalPlaceName
+                  }
+                  numberOfLines={2}
+                >
+                  {googlePlace
+                    ?.displayName ||
+                    selectedLocation
+                      ?.name}
+                </Text>
+              </View>
+
+              <Pressable
+                style={
+                  styles.modalCloseButton
+                }
+                onPress={() =>
+                  setAddModalVisible(
+                    false
+                  )
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color="#374151"
+                />
+              </Pressable>
+            </View>
+
+            <Text
+              style={
+                styles.modalLabel
+              }
+            >
+              Date
+            </Text>
+
+            <Pressable
+              style={
+                styles.modalField
+              }
+              onPress={() =>
+                setShowDatePicker(
+                  true
+                )
+              }
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={19}
+                color="#1769E8"
+              />
+
+              <Text
+                style={
+                  styles.modalFieldText
+                }
+              >
+                {formatDisplayDate(
+                  activityDate
+                )}
+              </Text>
+            </Pressable>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={
+                  activityDate
+                }
+                mode="date"
+                display="default"
+                onChange={
+                  handleActivityDateChange
+                }
+              />
+            )}
+
+            <Text
+              style={
+                styles.modalLabel
+              }
+            >
+              Time
+            </Text>
+
+            <Pressable
+              style={
+                styles.modalField
+              }
+              onPress={() =>
+                setShowTimePicker(
+                  true
+                )
+              }
+            >
+              <Ionicons
+                name="time-outline"
+                size={19}
+                color="#1769E8"
+              />
+
+              <Text
+                style={
+                  styles.modalFieldText
+                }
+              >
+                {formatDisplayTime(
+                  activityTime
+                )}
+              </Text>
+            </Pressable>
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={
+                  activityTime
+                }
+                mode="time"
+                display="default"
+                onChange={
+                  handleActivityTimeChange
+                }
+              />
+            )}
+
+            <Text
+              style={
+                styles.modalLabel
+              }
+            >
+              Notes (optional)
+            </Text>
+
+            <TextInput
+              style={
+                styles.notesInput
+              }
+              value={
+                activityNotes
+              }
+              onChangeText={
+                setActivityNotes
+              }
+              placeholder="Add a note..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={250}
+            />
+
+            <Pressable
+              style={[
+                styles.confirmAddButton,
+                addingToItinerary &&
+                  styles.confirmAddButtonDisabled,
+              ]}
+              disabled={
+                addingToItinerary
+              }
+              onPress={() =>
+                void addSelectedPlaceToItinerary()
+              }
+            >
+              {addingToItinerary ? (
+                <ActivityIndicator
+                  color="#FFFFFF"
+                  size="small"
+                />
+              ) : (
+                <>
+                  <Ionicons
+                    name="add"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.confirmAddButtonText
+                    }
+                  >
+                    Add activity
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2432,6 +3070,90 @@ function formatTime(
   } catch {
     return time;
   }
+}
+
+function parseStoredDate(
+  value: string
+) {
+  if (value.includes('T')) {
+    return new Date(value);
+  }
+
+  return new Date(
+    `${value}T00:00:00`
+  );
+}
+
+function startOfDay(
+  value: Date
+) {
+  const result =
+    new Date(value);
+
+  result.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+  return result;
+}
+
+function formatFirestoreDate(
+  value: Date
+) {
+  const year =
+    value.getFullYear();
+
+  const month = String(
+    value.getMonth() + 1
+  ).padStart(2, '0');
+
+  const day = String(
+    value.getDate()
+  ).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatFirestoreTime(
+  value: Date
+) {
+  const hours = String(
+    value.getHours()
+  ).padStart(2, '0');
+
+  const minutes = String(
+    value.getMinutes()
+  ).padStart(2, '0');
+
+  return `${hours}:${minutes}`;
+}
+
+function formatDisplayDate(
+  value: Date
+) {
+  return value.toLocaleDateString(
+    'en-GB',
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }
+  );
+}
+
+function formatDisplayTime(
+  value: Date
+) {
+  return value.toLocaleTimeString(
+    'en-US',
+    {
+      hour: 'numeric',
+      minute: '2-digit',
+    }
+  );
 }
 
 // ==========================================================
@@ -3220,6 +3942,130 @@ const styles =
 
       color:
         '#333',
+    },
+
+    addToItineraryButton: {
+      marginTop: 16,
+      minHeight: 48,
+      borderRadius: 14,
+      backgroundColor: '#1769E8',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+    },
+
+    addToItineraryText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
+
+    // ------------------------------------------------------
+    // ADD TO ITINERARY MODAL
+    // ------------------------------------------------------
+
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    },
+
+    addModalCard: {
+      paddingHorizontal: 22,
+      paddingTop: 18,
+      paddingBottom: 28,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      backgroundColor: '#FFFFFF',
+    },
+
+    addModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 18,
+    },
+
+    addModalTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: '#111827',
+    },
+
+    addModalPlaceName: {
+      marginTop: 4,
+      paddingRight: 12,
+      fontSize: 13,
+      lineHeight: 18,
+      color: '#6B7280',
+    },
+
+    modalCloseButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F3F4F6',
+    },
+
+    modalLabel: {
+      marginTop: 12,
+      marginBottom: 7,
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#374151',
+    },
+
+    modalField: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: '#D1D5DB',
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FFFFFF',
+    },
+
+    modalFieldText: {
+      marginLeft: 9,
+      fontSize: 14,
+      color: '#111827',
+    },
+
+    notesInput: {
+      minHeight: 88,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: '#D1D5DB',
+      borderRadius: 12,
+      textAlignVertical: 'top',
+      fontSize: 14,
+      color: '#111827',
+      backgroundColor: '#FFFFFF',
+    },
+
+    confirmAddButton: {
+      marginTop: 20,
+      minHeight: 50,
+      borderRadius: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: '#1769E8',
+    },
+
+    confirmAddButtonDisabled: {
+      opacity: 0.6,
+    },
+
+    confirmAddButtonText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#FFFFFF',
     },
 
     // ------------------------------------------------------
