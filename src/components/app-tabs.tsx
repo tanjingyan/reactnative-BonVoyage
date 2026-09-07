@@ -9,9 +9,9 @@ export default function AppTabs() {
 
   const colors =
     Colors[
-      scheme === 'unspecified'
-        ? 'light'
-        : scheme
+      scheme === 'dark'
+        ? 'dark'
+        : 'light'
     ];
 
   return (
@@ -19,16 +19,27 @@ export default function AppTabs() {
       backgroundColor={
         colors.background
       }
+
       indicatorColor={
         colors.backgroundElement
       }
+
+      // Keep ALL tab names visible
+      labelVisibilityMode="labeled"
+
       labelStyle={{
         selected: {
           color: colors.text,
         },
       }}
     >
-      <NativeTabs.Trigger name="index">
+      {/* ==================================================== */}
+      {/* HOME                                                 */}
+      {/* ==================================================== */}
+
+      <NativeTabs.Trigger
+        name="index"
+      >
         <NativeTabs.Trigger.Label>
           Home
         </NativeTabs.Trigger.Label>
@@ -41,40 +52,58 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
+      {/* ==================================================== */}
+      {/* EXPLORE                                              */}
+      {/* ==================================================== */}
+
+      <NativeTabs.Trigger
+        name="explore"
+      >
         <NativeTabs.Trigger.Label>
           Explore
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
           src={require(
-            '@/assets/images/tabIcons/explore.png'
+            '@/assets/images/explore.png'
           )}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="trips">
+      {/* ==================================================== */}
+      {/* TRIPS                                                */}
+      {/* ==================================================== */}
+
+      <NativeTabs.Trigger
+        name="trips"
+      >
         <NativeTabs.Trigger.Label>
           Trips
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
           src={require(
-            '@/assets/images/tabIcons/home.png'
+            '@/assets/images/my-trips.png'
           )}
           renderingMode="template"
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="profile">
+      {/* ==================================================== */}
+      {/* PROFILE                                              */}
+      {/* ==================================================== */}
+
+      <NativeTabs.Trigger
+        name="profile"
+      >
         <NativeTabs.Trigger.Label>
           Profile
         </NativeTabs.Trigger.Label>
 
         <NativeTabs.Trigger.Icon
           src={require(
-            '@/assets/images/tabIcons/home.png'
+            '@/assets/images/user.png'
           )}
           renderingMode="template"
         />
