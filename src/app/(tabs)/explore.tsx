@@ -210,6 +210,15 @@ type Guide = {
   } | null;
 };
 
+type PublicProfile = {
+  userId: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  location: string;
+  photoURL: string | null;
+};
+
 type TravellerSummary = {
   userId: string;
   displayName: string;
@@ -217,6 +226,9 @@ type TravellerSummary = {
   guideCount: number;
   destinations: string[];
   coverImage: string | null;
+  photoURL: string | null;
+  bio: string;
+  location: string;
 };
 
 // ==========================================================
@@ -680,6 +692,23 @@ export default function ExploreScreen() {
   ] =
     useState(true);
 
+  const [
+    publicProfiles,
+    setPublicProfiles,
+  ] =
+    useState<
+      Record<
+        string,
+        PublicProfile
+      >
+    >({});
+
+  const [
+    publicProfilesLoading,
+    setPublicProfilesLoading,
+  ] =
+    useState(true);
+
   useEffect(() => {
     const user =
       auth.currentUser;
@@ -754,6 +783,127 @@ export default function ExploreScreen() {
     return unsubscribe;
   }, []);
 
+  // ========================================================
+  // PUBLIC TRAVELLER PROFILES
+  // ========================================================
+  //
+  // Safe social profile data is stored separately from the
+  // private users/{uid} account document. This keeps fields
+  // such as email private while allowing Explore -> People
+  // to display the same name, bio, location and profile photo
+  // as the account owner's Profile screen.
+  // ========================================================
+
+  useEffect(() => {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      setPublicProfiles(
+        {}
+      );
+
+      setPublicProfilesLoading(
+        false
+      );
+
+      return;
+    }
+
+    setPublicProfilesLoading(
+      true
+    );
+
+    const publicProfilesRef =
+      collection(
+        db,
+        'publicProfiles'
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        publicProfilesRef,
+
+        snapshot => {
+          const loadedProfiles:
+            Record<
+              string,
+              PublicProfile
+            > = {};
+
+          snapshot.docs.forEach(
+            profileDocument => {
+              const data =
+                profileDocument.data();
+
+              loadedProfiles[
+                profileDocument.id
+              ] = {
+                userId:
+                  profileDocument.id,
+
+                displayName:
+                  String(
+                    data.displayName ??
+                    'BonVoyage Traveller'
+                  ),
+
+                username:
+                  String(
+                    data.username ??
+                    'traveller'
+                  ),
+
+                bio:
+                  String(
+                    data.bio ??
+                    ''
+                  ),
+
+                location:
+                  String(
+                    data.location ??
+                    ''
+                  ),
+
+                photoURL:
+                  data.photoURL
+                    ? String(
+                        data.photoURL
+                      )
+                    : null,
+              };
+            }
+          );
+
+          setPublicProfiles(
+            loadedProfiles
+          );
+
+          setPublicProfilesLoading(
+            false
+          );
+        },
+
+        error => {
+          console.error(
+            'Explore public profiles error:',
+            error
+          );
+
+          setPublicProfiles(
+            {}
+          );
+
+          setPublicProfilesLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, []);
+
   const filteredGuides =
     useMemo(() => {
       const search =
@@ -767,13 +917,22 @@ export default function ExploreScreen() {
 
       return guides.filter(
         guide => {
+          const publicProfile =
+            publicProfiles[
+              guide.userId
+            ];
+
           const searchable =
             [
               guide.title,
               guide.destination,
               guide.caption,
-              guide.creatorName,
-              guide.creatorUsername,
+              publicProfile
+                ?.displayName ??
+                guide.creatorName,
+              publicProfile
+                ?.username ??
+                guide.creatorUsername,
             ]
               .join(' ')
               .toLowerCase();
@@ -785,6 +944,7 @@ export default function ExploreScreen() {
       );
     }, [
       guides,
+      publicProfiles,
       searchText,
     ]);
 
@@ -792,9 +952,13 @@ export default function ExploreScreen() {
     useMemo(
       () =>
         buildTravellerSummaries(
-          guides
+          guides,
+          publicProfiles
         ),
-      [guides]
+      [
+        guides,
+        publicProfiles,
+      ]
     );
 
   const filteredTravellers =
@@ -814,6 +978,8 @@ export default function ExploreScreen() {
             [
               traveller.displayName,
               traveller.username,
+              traveller.bio,
+              traveller.location,
               ...traveller.destinations,
             ]
               .join(' ')
@@ -843,6 +1009,16 @@ export default function ExploreScreen() {
           traveller.displayName,
         username:
           traveller.username,
+
+        photoURL:
+          traveller.photoURL ??
+          '',
+
+        bio:
+          traveller.bio,
+
+        location:
+          traveller.location,
       },
     } as any);
   }
@@ -2295,11 +2471,20 @@ export default function ExploreScreen() {
                   places={
                     places
                   }
+                  savedPlaceIds={
+                    savedPlaceIds
+                  }
+                  onBack={
+                    clearSearch
+                  }
                   onOpenGoogleMaps={
                     openGoogleMaps
                   }
                   onAddToTrip={
                     openAddToTrip
+                  }
+                  onToggleSavedPlace={
+                    toggleSavedPlace
                   }
                 />
               ) : (
@@ -2338,10 +2523,14 @@ export default function ExploreScreen() {
                 filteredGuides
               }
               loading={
-                guidesLoading
+                guidesLoading ||
+                publicProfilesLoading
               }
               searchText={
                 searchText
+              }
+              publicProfiles={
+                publicProfiles
               }
             />
           )}
@@ -2357,7 +2546,8 @@ export default function ExploreScreen() {
                 filteredTravellers
               }
               loading={
-                guidesLoading
+                guidesLoading ||
+                publicProfilesLoading
               }
               searchText={
                 searchText
@@ -3346,6 +3536,12 @@ type SearchResultsProps = {
   places:
     GooglePlace[];
 
+  savedPlaceIds:
+    Set<string>;
+
+  onBack:
+    () => void;
+
   onOpenGoogleMaps:
     (
       place:
@@ -3357,53 +3553,102 @@ type SearchResultsProps = {
       place:
         GooglePlace
     ) => void;
+
+  onToggleSavedPlace:
+    (
+      place:
+        GooglePlace
+    ) => void;
 };
 
 function SearchResults({
   places,
+  savedPlaceIds,
+  onBack,
   onOpenGoogleMaps,
   onAddToTrip,
+  onToggleSavedPlace,
 }: SearchResultsProps) {
   if (
     places.length ===
     0
   ) {
     return (
-      <View
-        style={
-          styles.emptyContainer
-        }
-      >
+      <>
         <View
           style={
-            styles.largeIcon
+            styles.resultHeader
           }
         >
-          <Ionicons
-            name="search-outline"
-            size={34}
-            color="#1769E8"
-          />
+          <View
+            style={
+              styles.resultHeaderLeft
+            }
+          >
+            <Pressable
+              style={
+                styles.resultBackButton
+              }
+              onPress={
+                onBack
+              }
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Explore places"
+            >
+              <Ionicons
+                name="chevron-back"
+                size={23}
+                color="#111827"
+              />
+            </Pressable>
+
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              Search results
+            </Text>
+          </View>
         </View>
 
-        <Text
+        <View
           style={
-            styles.emptyTitle
+            styles.emptyContainer
           }
         >
-          No places found
-        </Text>
+          <View
+            style={
+              styles.largeIcon
+            }
+          >
+            <Ionicons
+              name="search-outline"
+              size={34}
+              color="#1769E8"
+            />
+          </View>
 
-        <Text
-          style={
-            styles.emptyDescription
-          }
-        >
-          Try another place,
-          destination or search
-          term.
-        </Text>
-      </View>
+          <Text
+            style={
+              styles.emptyTitle
+            }
+          >
+            No places found
+          </Text>
+
+          <Text
+            style={
+              styles.emptyDescription
+            }
+          >
+            Try another place,
+            destination or search
+            term.
+          </Text>
+        </View>
+      </>
     );
   }
 
@@ -3414,13 +3659,37 @@ function SearchResults({
           styles.resultHeader
         }
       >
-        <Text
+        <View
           style={
-            styles.sectionTitle
+            styles.resultHeaderLeft
           }
         >
-          Search results
-        </Text>
+          <Pressable
+            style={
+              styles.resultBackButton
+            }
+            onPress={
+              onBack
+            }
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Explore places"
+          >
+            <Ionicons
+              name="chevron-back"
+              size={23}
+              color="#111827"
+            />
+          </Pressable>
+
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            Search results
+          </Text>
+        </View>
 
         <Text
           style={
@@ -3439,27 +3708,45 @@ function SearchResults({
         (
           place,
           index
-        ) => (
-          <PlaceCard
-            key={
-              place.id ??
-              `${place.displayName}-${index}`
-            }
-            place={
-              place
-            }
-            onOpenGoogleMaps={() =>
-              onOpenGoogleMaps(
+        ) => {
+          const savedPlaceId =
+            place.id ??
+            encodeURIComponent(
+              `${place.displayName}|${place.formattedAddress ?? ''}`
+            );
+
+          return (
+            <PlaceCard
+              key={
+                savedPlaceId ||
+                `${place.displayName}-${index}`
+              }
+              place={
                 place
-              )
-            }
-            onAddToTrip={() =>
-              onAddToTrip(
-                place
-              )
-            }
-          />
-        )
+              }
+              isSaved={
+                savedPlaceIds.has(
+                  savedPlaceId
+                )
+              }
+              onOpenGoogleMaps={() =>
+                onOpenGoogleMaps(
+                  place
+                )
+              }
+              onAddToTrip={() =>
+                onAddToTrip(
+                  place
+                )
+              }
+              onToggleSaved={() =>
+                onToggleSavedPlace(
+                  place
+                )
+              }
+            />
+          );
+        }
       )}
     </>
   );
@@ -3473,17 +3760,25 @@ type PlaceCardProps = {
   place:
     GooglePlace;
 
+  isSaved:
+    boolean;
+
   onOpenGoogleMaps:
     () => void;
 
   onAddToTrip:
     () => void;
+
+  onToggleSaved:
+    () => void;
 };
 
 function PlaceCard({
   place,
+  isSaved,
   onOpenGoogleMaps,
   onAddToTrip,
+  onToggleSaved,
 }: PlaceCardProps) {
   return (
     <View
@@ -3491,6 +3786,42 @@ function PlaceCard({
         styles.placeCard
       }
     >
+      {/* BOOKMARK */}
+
+      <Pressable
+        style={({
+          pressed,
+        }) => [
+          styles.placeBookmarkButton,
+          pressed &&
+            styles.placeBookmarkButtonPressed,
+        ]}
+        onPress={
+          onToggleSaved
+        }
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isSaved
+            ? `Remove ${place.displayName} from saved places`
+            : `Save ${place.displayName}`
+        }
+      >
+        <Ionicons
+          name={
+            isSaved
+              ? 'bookmark'
+              : 'bookmark-outline'
+          }
+          size={23}
+          color={
+            isSaved
+              ? '#1769E8'
+              : '#374151'
+          }
+        />
+      </Pressable>
+
       {/* PHOTO */}
 
       {place.photoUri ? (
@@ -3683,12 +4014,18 @@ type GuidesSectionProps = {
   guides: Guide[];
   loading: boolean;
   searchText: string;
+  publicProfiles:
+    Record<
+      string,
+      PublicProfile
+    >;
 };
 
 function GuidesSection({
   guides,
   loading,
   searchText,
+  publicProfiles,
 }: GuidesSectionProps) {
   if (loading) {
     return (
@@ -3797,6 +4134,12 @@ function GuidesSection({
             guide={
               guide
             }
+            publicProfile={
+              publicProfiles[
+                guide.userId
+              ] ??
+              null
+            }
           />
         )
       )}
@@ -3810,12 +4153,33 @@ function GuidesSection({
 
 function GuideCard({
   guide,
+  publicProfile,
 }: {
   guide: Guide;
+  publicProfile:
+    | PublicProfile
+    | null;
 }) {
+  const creatorName =
+    publicProfile
+      ?.displayName ||
+    guide.creatorName ||
+    'BonVoyage Traveller';
+
+  const creatorUsername =
+    publicProfile
+      ?.username ||
+    guide.creatorUsername ||
+    'traveller';
+
+  const creatorPhotoURL =
+    publicProfile
+      ?.photoURL ??
+    null;
+
   const initials =
     getSocialInitials(
-      guide.creatorName
+      creatorName
     );
 
   return (
@@ -3851,13 +4215,26 @@ function GuideCard({
             styles.guideAvatar
           }
         >
-          <Text
-            style={
-              styles.guideAvatarText
-            }
-          >
-            {initials}
-          </Text>
+          {creatorPhotoURL ? (
+            <Image
+              source={{
+                uri:
+                  creatorPhotoURL,
+              }}
+              style={
+                styles.guideAvatarImage
+              }
+              resizeMode="cover"
+            />
+          ) : (
+            <Text
+              style={
+                styles.guideAvatarText
+              }
+            >
+              {initials}
+            </Text>
+          )}
         </View>
 
         <View
@@ -3870,8 +4247,7 @@ function GuideCard({
               styles.guideCreatorName
             }
           >
-            {guide.creatorName ||
-              'BonVoyage Traveller'}
+            {creatorName}
           </Text>
 
           <Text
@@ -3879,9 +4255,7 @@ function GuideCard({
               styles.guideCreatorUsername
             }
           >
-            @
-            {guide.creatorUsername ||
-              'traveller'}
+            @{creatorUsername}
           </Text>
         </View>
 
@@ -4264,13 +4638,26 @@ function TravellerCard({
           styles.travellerAvatar
         }
       >
-        <Text
-          style={
-            styles.travellerAvatarText
-          }
-        >
-          {initials}
-        </Text>
+        {traveller.photoURL ? (
+          <Image
+            source={{
+              uri:
+                traveller.photoURL,
+            }}
+            style={
+              styles.travellerAvatarImage
+            }
+            resizeMode="cover"
+          />
+        ) : (
+          <Text
+            style={
+              styles.travellerAvatarText
+            }
+          >
+            {initials}
+          </Text>
+        )}
       </View>
 
       <View
@@ -4426,7 +4813,12 @@ function normaliseSocialSearch(
 }
 
 function buildTravellerSummaries(
-  guides: Guide[]
+  guides: Guide[],
+  publicProfiles:
+    Record<
+      string,
+      PublicProfile
+    >
 ) {
   const travellerMap =
     new Map<
@@ -4436,6 +4828,11 @@ function buildTravellerSummaries(
 
   guides.forEach(
     guide => {
+      const publicProfile =
+        publicProfiles[
+          guide.userId
+        ];
+
       const existing =
         travellerMap.get(
           guide.userId
@@ -4474,14 +4871,19 @@ function buildTravellerSummaries(
             guide.userId,
 
           displayName:
+            publicProfile
+              ?.displayName ||
             guide.creatorName ||
             'BonVoyage Traveller',
 
           username:
+            publicProfile
+              ?.username ||
             guide.creatorUsername ||
             'traveller',
 
-          guideCount: 1,
+          guideCount:
+            1,
 
           destinations:
             guide.destination
@@ -4493,6 +4895,21 @@ function buildTravellerSummaries(
           coverImage:
             guide.coverImage ??
             null,
+
+          photoURL:
+            publicProfile
+              ?.photoURL ??
+            null,
+
+          bio:
+            publicProfile
+              ?.bio ??
+            '',
+
+          location:
+            publicProfile
+              ?.location ??
+            '',
         }
       );
     }
@@ -5381,6 +5798,37 @@ const styles =
         'space-between',
     },
 
+    resultHeaderLeft: {
+      flex: 1,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    resultBackButton: {
+      width: 34,
+
+      height: 34,
+
+      marginRight: 7,
+
+      marginLeft: -6,
+
+      borderRadius: 17,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F3F4F6',
+    },
+
     resultCount: {
       fontSize: 12,
 
@@ -5421,6 +5869,50 @@ const styles =
       },
 
       elevation: 2,
+    },
+
+    placeBookmarkButton: {
+      position: 'absolute',
+
+      top: 12,
+
+      right: 12,
+
+      zIndex: 5,
+
+      width: 40,
+
+      height: 40,
+
+      borderRadius: 20,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        'rgba(255,255,255,0.96)',
+
+      shadowColor:
+        '#000',
+
+      shadowOpacity:
+        0.12,
+
+      shadowRadius: 5,
+
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+
+      elevation: 4,
+    },
+
+    placeBookmarkButtonPressed: {
+      opacity: 0.72,
     },
 
     placeImage: {
@@ -5683,6 +6175,9 @@ const styles =
 
       borderRadius: 20,
 
+      overflow:
+        'hidden',
+
       alignItems:
         'center',
 
@@ -5691,6 +6186,12 @@ const styles =
 
       backgroundColor:
         '#DCEBFF',
+    },
+
+    guideAvatarImage: {
+      width: '100%',
+
+      height: '100%',
     },
 
     guideAvatarText: {
@@ -5929,6 +6430,9 @@ const styles =
 
       borderRadius: 28,
 
+      overflow:
+        'hidden',
+
       alignItems:
         'center',
 
@@ -5937,6 +6441,12 @@ const styles =
 
       backgroundColor:
         '#DCEBFF',
+    },
+
+    travellerAvatarImage: {
+      width: '100%',
+
+      height: '100%',
     },
 
     travellerAvatarText: {

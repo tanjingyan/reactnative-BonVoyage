@@ -457,6 +457,92 @@ export default function ProfileScreen() {
   }, [user?.uid]);
 
   // ========================================================
+  // SYNC SAFE PUBLIC PROFILE
+  // ========================================================
+  //
+  // The users/{uid} document remains private and may contain
+  // account-only information such as the user's email.
+  //
+  // publicProfiles/{uid} contains only the social information
+  // that other signed-in BonVoyage users are allowed to see.
+  //
+  // Because the private user document is already observed with
+  // onSnapshot above, this effect automatically runs whenever
+  // the user changes their name, bio, location or profile photo.
+  // It also backfills publicProfiles for existing accounts the
+  // first time this Profile screen is opened.
+  // ========================================================
+  
+  useEffect(() => {
+    if (
+      !user ||
+      profileLoading ||
+      !profile
+    ) {
+      return;
+    }
+
+    // TypeScript now knows these cannot be null
+    const currentUser =
+      user;
+
+    const currentProfile =
+      profile;
+
+    async function syncPublicProfile() {
+      try {
+        await setDoc(
+          doc(
+            db,
+            'publicProfiles',
+            currentUser.uid
+          ),
+          {
+            userId:
+              currentUser.uid,
+
+            displayName:
+              currentProfile.displayName,
+
+            username:
+              currentProfile.username,
+
+            bio:
+              currentProfile.bio,
+
+            location:
+              currentProfile.location,
+
+            photoURL:
+              currentProfile.photoURL,
+
+            updatedAt:
+              serverTimestamp(),
+          },
+          {
+            merge: true,
+          }
+        );
+      } catch (error) {
+        console.log(
+          'Public profile sync error:',
+          error
+        );
+      }
+    }
+
+    void syncPublicProfile();
+  }, [
+    user?.uid,
+    profileLoading,
+    profile?.displayName,
+    profile?.username,
+    profile?.bio,
+    profile?.location,
+    profile?.photoURL,
+  ]);
+
+  // ========================================================
   // LOAD USER GUIDES
   // ========================================================
 

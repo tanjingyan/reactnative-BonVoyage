@@ -49,6 +49,15 @@ type FirestoreTimestampLike = {
   toMillis?: () => number;
 } | null;
 
+type PublicProfile = {
+  userId: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  location: string;
+  photoURL: string | null;
+};
+
 type Guide = {
   id: string;
   userId: string;
@@ -95,6 +104,20 @@ export default function GuideDetailsScreen() {
     useState<Guide | null>(
       null
     );
+
+  const [
+    creatorProfile,
+    setCreatorProfile,
+  ] =
+    useState<PublicProfile | null>(
+      null
+    );
+
+  const [
+    creatorProfileLoading,
+    setCreatorProfileLoading,
+  ] =
+    useState(false);
 
   const [
     places,
@@ -365,6 +388,124 @@ export default function GuideDetailsScreen() {
   }
 
   // ========================================================
+  // WATCH GUIDE CREATOR PUBLIC PROFILE
+  // ========================================================
+  //
+  // The guide keeps creatorName/creatorUsername as fallback
+  // values, while publicProfiles/{uid} is the current source
+  // for the creator's public name, username and profile photo.
+  // ========================================================
+
+  useEffect(() => {
+    const creatorId =
+      guide?.userId;
+
+    if (!creatorId) {
+      setCreatorProfile(
+        null
+      );
+
+      setCreatorProfileLoading(
+        false
+      );
+
+      return;
+    }
+
+    setCreatorProfileLoading(
+      true
+    );
+
+    const creatorProfileRef =
+      doc(
+        db,
+        'publicProfiles',
+        creatorId
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        creatorProfileRef,
+
+        snapshot => {
+          if (
+            snapshot.exists()
+          ) {
+            const data =
+              snapshot.data();
+
+            setCreatorProfile({
+              userId:
+                snapshot.id,
+
+              displayName:
+                String(
+                  data.displayName ??
+                  guide?.creatorName ??
+                  'BonVoyage Traveller'
+                ),
+
+              username:
+                String(
+                  data.username ??
+                  guide?.creatorUsername ??
+                  'traveller'
+                ),
+
+              bio:
+                String(
+                  data.bio ??
+                  ''
+                ),
+
+              location:
+                String(
+                  data.location ??
+                  ''
+                ),
+
+              photoURL:
+                data.photoURL
+                  ? String(
+                      data.photoURL
+                    )
+                  : null,
+            });
+          } else {
+            setCreatorProfile(
+              null
+            );
+          }
+
+          setCreatorProfileLoading(
+            false
+          );
+        },
+
+        error => {
+          console.error(
+            'Load guide creator profile error:',
+            error
+          );
+
+          setCreatorProfile(
+            null
+          );
+
+          setCreatorProfileLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [
+    guide?.userId,
+    guide?.creatorName,
+    guide?.creatorUsername,
+  ]);
+
+  // ========================================================
   // WATCH SAVED STATE
   // ========================================================
 
@@ -409,6 +550,23 @@ export default function GuideDetailsScreen() {
     user?.uid,
     id,
   ]);
+
+  const creatorName =
+    creatorProfile
+      ?.displayName ||
+    guide?.creatorName ||
+    'BonVoyage Traveller';
+
+  const creatorUsername =
+    creatorProfile
+      ?.username ||
+    guide?.creatorUsername ||
+    'traveller';
+
+  const creatorPhotoURL =
+    creatorProfile
+      ?.photoURL ??
+    null;
 
   // ========================================================
   // SAVE / UNSAVE GUIDE
@@ -469,10 +627,10 @@ export default function GuideDetailsScreen() {
             guide.userId,
 
           creatorName:
-            guide.creatorName,
+            creatorName,
 
           creatorUsername:
-            guide.creatorUsername,
+            creatorUsername,
 
           title:
             guide.title,
@@ -737,15 +895,33 @@ export default function GuideDetailsScreen() {
               styles.avatar
             }
           >
-            <Text
-              style={
-                styles.avatarText
-              }
-            >
-              {getInitials(
-                guide.creatorName
-              )}
-            </Text>
+            {creatorProfileLoading ? (
+              <ActivityIndicator
+                size="small"
+                color="#1769E8"
+              />
+            ) : creatorPhotoURL ? (
+              <Image
+                source={{
+                  uri:
+                    creatorPhotoURL,
+                }}
+                style={
+                  styles.avatarImage
+                }
+                resizeMode="cover"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.avatarText
+                }
+              >
+                {getInitials(
+                  creatorName
+                )}
+              </Text>
+            )}
           </View>
 
           <View
@@ -759,7 +935,7 @@ export default function GuideDetailsScreen() {
               }
             >
               {
-                guide.creatorName
+                creatorName
               }
             </Text>
 
@@ -770,7 +946,7 @@ export default function GuideDetailsScreen() {
             >
               @
               {
-                guide.creatorUsername
+                creatorUsername
               }
             </Text>
           </View>
@@ -1438,12 +1614,18 @@ const styles =
       width: 44,
       height: 44,
       borderRadius: 22,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent:
         'center',
       backgroundColor:
         '#DBEAFE',
       marginRight: 11,
+    },
+
+    avatarImage: {
+      width: '100%',
+      height: '100%',
     },
 
     avatarText: {

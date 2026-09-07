@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -48,6 +55,11 @@ type TripStatus =
   | 'ongoing'
   | 'past';
 
+type FilterTab =
+  | 'upcoming'
+  | 'ongoing'
+  | 'past';
+
 // ==========================================================
 // MAIN SCREEN
 // ==========================================================
@@ -65,6 +77,14 @@ export default function TripsScreen() {
   ] =
     useState<string | null>(
       null
+    );
+
+  const [
+    activeTab,
+    setActiveTab,
+  ] =
+    useState<FilterTab>(
+      'upcoming'
     );
 
   // ========================================================
@@ -101,18 +121,17 @@ export default function TripsScreen() {
           const tripList:
             Trip[] =
             snapshot.docs.map(
-              doc => ({
-                id: doc.id,
+              tripDocument => ({
+                id:
+                  tripDocument.id,
 
-                ...(doc.data() as Omit<
+                ...(tripDocument.data() as Omit<
                   Trip,
                   'id'
                 >),
               })
             );
 
-          // Sort trips:
-          // In progress → Upcoming → Past
           tripList.sort(
             compareTrips
           );
@@ -142,6 +161,60 @@ export default function TripsScreen() {
   }, []);
 
   // ========================================================
+  // COUNTS / FILTERING
+  // ========================================================
+
+  const counts =
+    useMemo(() => {
+      return {
+        upcoming:
+          trips.filter(
+            trip =>
+              getTripStatus(
+                trip.startDate,
+                trip.endDate
+              ) ===
+              'upcoming'
+          ).length,
+
+        ongoing:
+          trips.filter(
+            trip =>
+              getTripStatus(
+                trip.startDate,
+                trip.endDate
+              ) ===
+              'ongoing'
+          ).length,
+
+        past:
+          trips.filter(
+            trip =>
+              getTripStatus(
+                trip.startDate,
+                trip.endDate
+              ) ===
+              'past'
+          ).length,
+      };
+    }, [trips]);
+
+  const filteredTrips =
+    useMemo(() => {
+      return trips.filter(
+        trip =>
+          getTripStatus(
+            trip.startDate,
+            trip.endDate
+          ) ===
+          activeTab
+      );
+    }, [
+      activeTab,
+      trips,
+    ]);
+
+  // ========================================================
   // DELETE TRIP
   // ========================================================
 
@@ -162,9 +235,12 @@ export default function TripsScreen() {
           text: 'Cancel',
           style: 'cancel',
         },
+
         {
           text: 'Delete',
-          style: 'destructive',
+          style:
+            'destructive',
+
           onPress: () =>
             void deleteTrip(
               trip.id
@@ -196,9 +272,10 @@ export default function TripsScreen() {
 
       /*
        * Firestore does not automatically remove
-       * subcollections when the parent document is deleted,
-       * so the activities are removed first.
+       * subcollections when the parent trip is deleted,
+       * so remove activities first.
        */
+
       const activitiesSnapshot =
         await getDocs(
           collection(
@@ -209,11 +286,6 @@ export default function TripsScreen() {
           )
         );
 
-      /*
-       * Firestore batches support up to 500 operations.
-       * This app's personal itineraries are far below that,
-       * but chunking keeps the deletion safe if a trip grows.
-       */
       const activityDocs =
         activitiesSnapshot.docs;
 
@@ -247,9 +319,10 @@ export default function TripsScreen() {
       }
 
       /*
-       * Delete the trip only after its activities
-       * have been removed successfully.
+       * Delete the trip only after all activities
+       * have been removed.
        */
+
       const tripBatch =
         writeBatch(db);
 
@@ -263,10 +336,6 @@ export default function TripsScreen() {
 
       await tripBatch.commit();
 
-      /*
-       * onSnapshot() automatically removes the deleted trip
-       * from the list, so no manual setTrips() is required.
-       */
       Alert.alert(
         'Trip deleted',
         'The trip has been removed successfully.'
@@ -313,33 +382,25 @@ export default function TripsScreen() {
             styles.header
           }
         >
-          <View
+          <Text
             style={
-              styles.headerTextContainer
+              styles.title
             }
           >
-            <Text
-              style={
-                styles.title
-              }
-            >
-              My Trips
-            </Text>
+            My Trips
+          </Text>
 
-            <Text
-              style={
-                styles.subtitle
-              }
-            >
-              Your private journeys,
-              all in one place.
-            </Text>
-          </View>
-
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Your private journeys, all in one place
+          </Text>
         </View>
 
         {/* ================================================= */}
-        {/* PRIVATE TRIP INFO                                 */}
+        {/* PRIVATE TRIPS BANNER                              */}
         {/* ================================================= */}
 
         {!loading &&
@@ -357,7 +418,7 @@ export default function TripsScreen() {
               <Ionicons
                 name="lock-closed-outline"
                 size={18}
-                color="#1769E8"
+                color="#4F46E5"
               />
             </View>
 
@@ -379,8 +440,7 @@ export default function TripsScreen() {
                   styles.privateDescription
                 }
               >
-                Only you can see your
-                personal itineraries.
+                Only you can see your personal itineraries
               </Text>
             </View>
 
@@ -401,7 +461,64 @@ export default function TripsScreen() {
         ) : null}
 
         {/* ================================================= */}
-        {/* LOADING                                           */}
+        {/* STATUS FILTER TABS                                */}
+        {/* ================================================= */}
+
+        {!loading &&
+        trips.length > 0 ? (
+          <View
+            style={
+              styles.tabsRow
+            }
+          >
+            <FilterButton
+              title="Upcoming"
+              active={
+                activeTab ===
+                'upcoming'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'upcoming'
+                )
+              }
+            />
+
+            <FilterButton
+              title="In Progress"
+              active={
+                activeTab ===
+                'ongoing'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'ongoing'
+                )
+              }
+            />
+
+            <FilterButton
+              title={
+                counts.past >
+                0
+                  ? `Past ${counts.past}`
+                  : 'Past'
+              }
+              active={
+                activeTab ===
+                'past'
+              }
+              onPress={() =>
+                setActiveTab(
+                  'past'
+                )
+              }
+            />
+          </View>
+        ) : null}
+
+        {/* ================================================= */}
+        {/* CONTENT                                           */}
         {/* ================================================= */}
 
         {loading ? (
@@ -412,7 +529,7 @@ export default function TripsScreen() {
           >
             <ActivityIndicator
               size="large"
-              color="#1769E8"
+              color="#4F46E5"
             />
 
             <Text
@@ -425,76 +542,116 @@ export default function TripsScreen() {
           </View>
         ) : trips.length ===
           0 ? (
-          // =================================================
-          // EMPTY STATE
-          // =================================================
-
           <EmptyTrips />
         ) : (
-          // =================================================
-          // TRIPS LIST
-          // =================================================
-
-          <FlatList
-            data={trips}
-            keyExtractor={
-              item =>
-                item.id
-            }
-            showsVerticalScrollIndicator={
-              false
-            }
-            contentContainerStyle={
-              styles.list
-            }
-            renderItem={({
-              item,
-            }) => (
-              <TripCard
-                trip={item}
-                deleting={
-                  deletingTripId ===
+          <>
+            <FlatList
+              style={
+                styles.listContainer
+              }
+              data={
+                filteredTrips
+              }
+              keyExtractor={
+                item =>
                   item.id
-                }
-                onDelete={() =>
-                  confirmDeleteTrip(
+              }
+              showsVerticalScrollIndicator={
+                false
+              }
+              contentContainerStyle={
+                filteredTrips.length >
+                0
+                  ? styles.list
+                  : styles.emptyFilteredList
+              }
+              renderItem={({
+                item,
+              }) => (
+                <SwipeTripCard
+                  trip={
                     item
-                  )
-                }
-              />
-            )}
-            ListFooterComponent={
-              <Pressable
-                style={({ pressed }) => [
-                  styles.createTripButton,
-
-                  pressed &&
-                    styles.createTripButtonPressed,
-                ]}
-                onPress={() =>
-                  router.push(
-                    '/create-trip'
-                  )
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Create new trip"
-              >
-                <Ionicons
-                  name="add"
-                  size={18}
-                  color="#FFFFFF"
-                />
-
-                <Text
-                  style={
-                    styles.createTripButtonText
                   }
-                >
-                  CREATE NEW TRIP
-                </Text>
-              </Pressable>
-            }
-          />
+                  deleting={
+                    deletingTripId ===
+                    item.id
+                  }
+                  onDelete={() =>
+                    confirmDeleteTrip(
+                      item
+                    )
+                  }
+                />
+              )}
+              ListEmptyComponent={
+                <FilteredEmptyState
+                  status={
+                    activeTab
+                  }
+                />
+              }
+            />
+
+            {/* ============================================= */}
+            {/* SWIPE HINT                                    */}
+            {/* ============================================= */}
+
+            <View
+              style={
+                styles.swipeHint
+              }
+            >
+              <Ionicons
+                name="search-outline"
+                size={16}
+                color="#6B7280"
+              />
+
+              <Text
+                style={
+                  styles.swipeHintText
+                }
+              >
+                Swipe left on a trip to delete it
+              </Text>
+            </View>
+
+            {/* ============================================= */}
+            {/* CREATE NEW TRIP                               */}
+            {/* ============================================= */}
+
+            <Pressable
+              style={({
+                pressed,
+              }) => [
+                styles.createTripButton,
+
+                pressed &&
+                  styles.createTripButtonPressed,
+              ]}
+              onPress={() =>
+                router.push(
+                  '/create-trip'
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Create new trip"
+            >
+              <Ionicons
+                name="add"
+                size={20}
+                color="#FFFFFF"
+              />
+
+              <Text
+                style={
+                  styles.createTripButtonText
+                }
+              >
+                Create new trip
+              </Text>
+            </Pressable>
+          </>
         )}
       </SafeAreaView>
     </View>
@@ -502,10 +659,54 @@ export default function TripsScreen() {
 }
 
 // ==========================================================
-// TRIP CARD
+// FILTER BUTTON
 // ==========================================================
 
-function TripCard({
+function FilterButton({
+  title,
+  active,
+  onPress,
+}: {
+  title: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={
+        styles.filterButton
+      }
+      onPress={
+        onPress
+      }
+    >
+      <Text
+        style={[
+          styles.filterText,
+
+          active &&
+            styles.filterTextActive,
+        ]}
+      >
+        {title}
+      </Text>
+
+      {active ? (
+        <View
+          style={
+            styles.filterUnderline
+          }
+        />
+      ) : null}
+    </Pressable>
+  );
+}
+
+// ==========================================================
+// SWIPEABLE TRIP CARD
+// ==========================================================
+
+function SwipeTripCard({
   trip,
   deleting,
   onDelete,
@@ -514,6 +715,22 @@ function TripCard({
   deleting: boolean;
   onDelete: () => void;
 }) {
+  const translateX =
+    useRef(
+      new Animated.Value(
+        0
+      )
+    ).current;
+
+  const swipeOpen =
+    useRef(false);
+
+  const [
+    imageFailed,
+    setImageFailed,
+  ] =
+    useState(false);
+
   const status =
     getTripStatus(
       trip.startDate,
@@ -526,7 +743,124 @@ function TripCard({
       trip.endDate
     );
 
+  function closeSwipe() {
+    swipeOpen.current =
+      false;
+
+    Animated.spring(
+      translateX,
+      {
+        toValue: 0,
+        useNativeDriver:
+          true,
+        bounciness: 0,
+      }
+    ).start();
+  }
+
+  function openSwipe() {
+    swipeOpen.current =
+      true;
+
+    Animated.spring(
+      translateX,
+      {
+        toValue: -82,
+        useNativeDriver:
+          true,
+        bounciness: 0,
+      }
+    ).start();
+  }
+
+  const panResponder =
+    useMemo(
+      () =>
+        PanResponder.create({
+          onMoveShouldSetPanResponder:
+            (
+              _event,
+              gesture
+            ) => {
+              return (
+                Math.abs(
+                  gesture.dx
+                ) > 8 &&
+                Math.abs(
+                  gesture.dx
+                ) >
+                  Math.abs(
+                    gesture.dy
+                  )
+              );
+            },
+
+          onPanResponderMove:
+            (
+              _event,
+              gesture
+            ) => {
+              let nextX =
+                gesture.dx;
+
+              if (
+                swipeOpen.current
+              ) {
+                nextX =
+                  -82 +
+                  gesture.dx;
+              }
+
+              const clamped =
+                Math.max(
+                  -92,
+                  Math.min(
+                    0,
+                    nextX
+                  )
+                );
+
+              translateX.setValue(
+                clamped
+              );
+            },
+
+          onPanResponderRelease:
+            (
+              _event,
+              gesture
+            ) => {
+              if (
+                gesture.dx <
+                  -35 ||
+                (
+                  swipeOpen.current &&
+                  gesture.dx <
+                    25
+                )
+              ) {
+                openSwipe();
+              } else {
+                closeSwipe();
+              }
+            },
+
+          onPanResponderTerminate:
+            () => {
+              closeSwipe();
+            },
+        }),
+      [translateX]
+    );
+
   function openTrip() {
+    if (
+      swipeOpen.current
+    ) {
+      closeSwipe();
+      return;
+    }
+
     router.push({
       pathname:
         '/trip/[id]',
@@ -538,192 +872,171 @@ function TripCard({
   }
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.tripCard,
-
-        pressed &&
-          styles.tripCardPressed,
-      ]}
-      onPress={
-        openTrip
+    <View
+      style={
+        styles.swipeContainer
       }
     >
       {/* =================================================== */}
-      {/* DESTINATION IMAGE                                   */}
+      {/* DELETE ACTION BEHIND CARD                           */}
       {/* =================================================== */}
 
-      <Image
-        source={{
-          uri:
-            getTripImage(
-              trip.destination
-            ),
-        }}
-        style={
-          styles.tripImage
+      <Pressable
+        style={({
+          pressed,
+        }) => [
+          styles.deleteAction,
+
+          pressed &&
+          !deleting &&
+            styles.deleteActionPressed,
+        ]}
+        disabled={
+          deleting
         }
-        resizeMode="cover"
-      />
-
-      {/* =================================================== */}
-      {/* TRIP INFORMATION                                    */}
-      {/* =================================================== */}
-
-      <View
-        style={
-          styles.tripContent
+        onPress={
+          onDelete
         }
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${trip.title}`}
       >
-        <View
-          style={
-            styles.statusRow
-          }
-        >
-          <CompactStatusBadge
-            status={
-              status
-            }
+        {deleting ? (
+          <ActivityIndicator
+            size="small"
+            color="#FFFFFF"
           />
-        </View>
-
-        <Text
-          style={
-            styles.tripTitle
-          }
-          numberOfLines={1}
-        >
-          {trip.title}
-        </Text>
-
-        <View
-          style={
-            styles.infoRow
-          }
-        >
-          <Ionicons
-            name="location-outline"
-            size={13}
-            color="#6B7280"
-          />
-
-          <Text
-            style={
-              styles.infoText
-            }
-            numberOfLines={1}
-          >
-            {trip.destination}
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.infoRow
-          }
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={13}
-            color="#6B7280"
-          />
-
-          <Text
-            style={
-              styles.infoText
-            }
-            numberOfLines={1}
-          >
-            {formatTripDateShort(
-              trip.startDate
-            )}
-            {' - '}
-            {formatTripDateShort(
-              trip.endDate
-            )}
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.durationRow
-          }
-        >
-          <Ionicons
-            name="time-outline"
-            size={13}
-            color="#1769E8"
-          />
-
-          <Text
-            style={
-              styles.durationText
-            }
-          >
-            {duration}{' '}
-            {duration === 1
-              ? 'day'
-              : 'days'}
-          </Text>
-        </View>
-      </View>
-
-      {/* =================================================== */}
-      {/* ACTIONS                                             */}
-      {/* =================================================== */}
-
-      <View
-        style={
-          styles.cardActions
-        }
-      >
-        <Pressable
-          style={({ pressed }) => [
-            styles.deleteTripButton,
-
-            pressed &&
-            !deleting &&
-              styles.deleteTripButtonPressed,
-
-            deleting &&
-              styles.deleteTripButtonDisabled,
-          ]}
-          disabled={
-            deleting
-          }
-          onPress={event => {
-            /*
-             * The entire trip card is tappable.
-             * Prevent deleting from also opening Trip Details.
-             */
-            event.stopPropagation();
-
-            onDelete();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`Delete ${trip.title}`}
-        >
-          {deleting ? (
-            <ActivityIndicator
-              size="small"
-              color="#DC2626"
-            />
-          ) : (
+        ) : (
+          <>
             <Ionicons
               name="trash-outline"
-              size={16}
-              color="#DC2626"
+              size={22}
+              color="#FFFFFF"
             />
-          )}
-        </Pressable>
 
-        <Ionicons
-          name="chevron-forward"
-          size={22}
-          color="#9CA3AF"
-        />
-      </View>
-    </Pressable>
+            <Text
+              style={
+                styles.deleteActionText
+              }
+            >
+              Delete
+            </Text>
+          </>
+        )}
+      </Pressable>
+
+      {/* =================================================== */}
+      {/* MOVING CARD                                         */}
+      {/* =================================================== */}
+
+      <Animated.View
+        style={{
+          transform: [
+            {
+              translateX,
+            },
+          ],
+        }}
+        {...panResponder.panHandlers}
+      >
+        <Pressable
+          style={({
+            pressed,
+          }) => [
+            styles.tripCard,
+
+            pressed &&
+              styles.tripCardPressed,
+          ]}
+          onPress={
+            openTrip
+          }
+        >
+          {/* IMAGE */}
+
+          {!imageFailed ? (
+            <Image
+              source={{
+                uri:
+                  getTripImage(
+                    trip.destination
+                  ),
+              }}
+              style={
+                styles.tripImage
+              }
+              resizeMode="cover"
+              onError={() =>
+                setImageFailed(
+                  true
+                )
+              }
+            />
+          ) : (
+            <View
+              style={
+                styles.tripImagePlaceholder
+              }
+            >
+              <Ionicons
+                name="image-outline"
+                size={24}
+                color="#9CA3AF"
+              />
+            </View>
+          )}
+
+          {/* INFO */}
+
+          <View
+            style={
+              styles.tripContent
+            }
+          >
+            <CompactStatusBadge
+              status={
+                status
+              }
+            />
+
+            <Text
+              style={
+                styles.tripTitle
+              }
+              numberOfLines={
+                1
+              }
+            >
+              {trip.title}
+            </Text>
+
+            <Text
+              style={
+                styles.tripMetaText
+              }
+              numberOfLines={
+                1
+              }
+            >
+              {formatTripDateRange(
+                trip.startDate,
+                trip.endDate
+              )}
+              {'  ·  '}
+              {duration}{' '}
+              {duration === 1
+                ? 'day'
+                : 'days'}
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color="#B7BCC8"
+          />
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -743,13 +1056,13 @@ function CompactStatusBadge({
     return (
       <View
         style={[
-          styles.compactStatusBadge,
+          styles.statusBadge,
           styles.ongoingBadge,
         ]}
       >
         <Text
           style={[
-            styles.compactStatusText,
+            styles.statusBadgeText,
             styles.ongoingText,
           ]}
         >
@@ -766,13 +1079,13 @@ function CompactStatusBadge({
     return (
       <View
         style={[
-          styles.compactStatusBadge,
+          styles.statusBadge,
           styles.upcomingBadge,
         ]}
       >
         <Text
           style={[
-            styles.compactStatusText,
+            styles.statusBadgeText,
             styles.upcomingText,
           ]}
         >
@@ -785,116 +1098,24 @@ function CompactStatusBadge({
   return (
     <View
       style={[
-        styles.compactStatusBadge,
-        styles.pastTripBadge,
-      ]}
-    >
-      <Text
-        style={[
-          styles.compactStatusText,
-          styles.pastTripText,
-        ]}
-      >
-        Past trip
-      </Text>
-    </View>
-  );
-}
-
-
-function StatusBadge({
-  status,
-}: {
-  status: TripStatus;
-}) {
-  if (
-    status ===
-    'ongoing'
-  ) {
-    return (
-      <View
-        style={[
-          styles.statusBadge,
-          styles.ongoingBadge,
-        ]}
-      >
-        <View
-          style={[
-            styles.statusDot,
-            styles.ongoingDot,
-          ]}
-        />
-
-        <Text
-          style={[
-            styles.statusText,
-            styles.ongoingText,
-          ]}
-        >
-          IN PROGRESS
-        </Text>
-      </View>
-    );
-  }
-
-  if (
-    status ===
-    'upcoming'
-  ) {
-    return (
-      <View
-        style={[
-          styles.statusBadge,
-          styles.upcomingBadge,
-        ]}
-      >
-        <View
-          style={[
-            styles.statusDot,
-            styles.upcomingDot,
-          ]}
-        />
-
-        <Text
-          style={[
-            styles.statusText,
-            styles.upcomingText,
-          ]}
-        >
-          UPCOMING
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View
-      style={[
         styles.statusBadge,
         styles.pastBadge,
       ]}
     >
-      <View
-        style={[
-          styles.statusDot,
-          styles.pastDot,
-        ]}
-      />
-
       <Text
         style={[
-          styles.statusText,
+          styles.statusBadgeText,
           styles.pastText,
         ]}
       >
-        PAST
+        Past
       </Text>
     </View>
   );
 }
 
 // ==========================================================
-// EMPTY STATE
+// EMPTY STATES
 // ==========================================================
 
 function EmptyTrips() {
@@ -912,7 +1133,7 @@ function EmptyTrips() {
         <Ionicons
           name="airplane-outline"
           size={36}
-          color="#1769E8"
+          color="#4F46E5"
         />
       </View>
 
@@ -929,17 +1150,17 @@ function EmptyTrips() {
           styles.emptyText
         }
       >
-        Start planning your next
-        adventure by creating your
-        first private itinerary.
+        Start planning your next adventure by creating your first private itinerary.
       </Text>
 
       <Pressable
-        style={({ pressed }) => [
+        style={({
+          pressed,
+        }) => [
           styles.emptyButton,
 
           pressed &&
-            styles.buttonPressed,
+            styles.createTripButtonPressed,
         ]}
         onPress={() =>
           router.push(
@@ -965,48 +1186,45 @@ function EmptyTrips() {
   );
 }
 
-// ==========================================================
-// FORMAT DATE
-// ==========================================================
+function FilteredEmptyState({
+  status,
+}: {
+  status: FilterTab;
+}) {
+  const message =
+    status ===
+    'upcoming'
+      ? 'No upcoming trips'
+      : status ===
+          'ongoing'
+        ? 'No trips in progress'
+        : 'No past trips';
 
-function formatTripDate(
-  dateString: string
-) {
-  const date =
-    new Date(
-      dateString
-    );
+  return (
+    <View
+      style={
+        styles.filteredEmpty
+      }
+    >
+      <Ionicons
+        name="airplane-outline"
+        size={28}
+        color="#B7BCC8"
+      />
 
-  return date.toLocaleDateString(
-    'en-GB',
-    {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }
+      <Text
+        style={
+          styles.filteredEmptyText
+        }
+      >
+        {message}
+      </Text>
+    </View>
   );
 }
 
-
-function formatTripDateShort(
-  dateString: string
-) {
-  const date =
-    new Date(
-      dateString
-    );
-
-  return date.toLocaleDateString(
-    'en-GB',
-    {
-      day: '2-digit',
-      month: 'short',
-    }
-  );
-}
-
 // ==========================================================
-// START OF DAY
+// DATE / STATUS HELPERS
 // ==========================================================
 
 function startOfDay(
@@ -1024,10 +1242,6 @@ function startOfDay(
 
   return date;
 }
-
-// ==========================================================
-// GET TRIP STATUS
-// ==========================================================
 
 function getTripStatus(
   startDateString: string,
@@ -1069,10 +1283,6 @@ function getTripStatus(
   return 'ongoing';
 }
 
-// ==========================================================
-// GET TRIP DURATION
-// ==========================================================
-
 function getTripDuration(
   startDateString: string,
   endDateString: string
@@ -1101,125 +1311,55 @@ function getTripDuration(
     endDate.getTime() -
     startDate.getTime();
 
-  const duration =
+  return Math.max(
     Math.round(
       difference /
         millisecondsPerDay
-    ) + 1;
-
-  return Math.max(
-    duration,
+    ) + 1,
     1
   );
 }
 
-// ==========================================================
-// RELATIVE TRIP TEXT
-// ==========================================================
-
-function getRelativeTripText(
+function formatTripDateRange(
   startDateString: string,
   endDateString: string
 ) {
-  const status =
-    getTripStatus(
-      startDateString,
+  const start =
+    new Date(
+      startDateString
+    );
+
+  const end =
+    new Date(
       endDateString
     );
 
-  const today =
-    startOfDay(
-      new Date()
+  const startText =
+    start.toLocaleDateString(
+      'en-GB',
+      {
+        day:
+          '2-digit',
+        month:
+          'short',
+      }
     );
 
-  const startDate =
-    startOfDay(
-      new Date(
-        startDateString
-      )
+  const endText =
+    end.toLocaleDateString(
+      'en-GB',
+      {
+        day:
+          '2-digit',
+        month:
+          'short',
+        year:
+          'numeric',
+      }
     );
 
-  const endDate =
-    startOfDay(
-      new Date(
-        endDateString
-      )
-    );
-
-  const millisecondsPerDay =
-    1000 *
-    60 *
-    60 *
-    24;
-
-  // --------------------------------------------------------
-  // CURRENT TRIP
-  // --------------------------------------------------------
-
-  if (
-    status ===
-    'ongoing'
-  ) {
-    return 'Travelling now';
-  }
-
-  // --------------------------------------------------------
-  // UPCOMING TRIP
-  // --------------------------------------------------------
-
-  if (
-    status ===
-    'upcoming'
-  ) {
-    const daysUntil =
-      Math.round(
-        (
-          startDate.getTime() -
-          today.getTime()
-        ) /
-          millisecondsPerDay
-      );
-
-    if (
-      daysUntil === 1
-    ) {
-      return 'Starts tomorrow';
-    }
-
-    if (
-      daysUntil === 0
-    ) {
-      return 'Starts today';
-    }
-
-    return `Starts in ${daysUntil} days`;
-  }
-
-  // --------------------------------------------------------
-  // PAST TRIP
-  // --------------------------------------------------------
-
-  const daysAgo =
-    Math.round(
-      (
-        today.getTime() -
-        endDate.getTime()
-      ) /
-        millisecondsPerDay
-    );
-
-  if (
-    daysAgo === 1
-  ) {
-    return 'Ended yesterday';
-  }
-
-  return `Ended ${daysAgo} days ago`;
+  return `${startText} – ${endText}`;
 }
-
-// ==========================================================
-// SORT TRIPS
-// ==========================================================
 
 function compareTrips(
   first: Trip,
@@ -1246,7 +1386,6 @@ function compareTrips(
     past: 2,
   };
 
-  // Different status
   if (
     priority[firstStatus] !==
     priority[secondStatus]
@@ -1267,8 +1406,6 @@ function compareTrips(
       second.startDate
     ).getTime();
 
-  // Upcoming:
-  // soonest first
   if (
     firstStatus ===
     'upcoming'
@@ -1279,8 +1416,6 @@ function compareTrips(
     );
   }
 
-  // Past:
-  // newest first
   if (
     firstStatus ===
     'past'
@@ -1296,7 +1431,6 @@ function compareTrips(
     secondStart
   );
 }
-
 
 // ==========================================================
 // TRIP IMAGE
@@ -1318,7 +1452,7 @@ function getTripImage(
       'japan'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=900';
+    return 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=900&q=80';
   }
 
   if (
@@ -1326,7 +1460,7 @@ function getTripImage(
       'singapore'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=900';
+    return 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=900&q=80';
   }
 
   if (
@@ -1337,7 +1471,7 @@ function getTripImage(
       'france'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=900';
+    return 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=900&q=80';
   }
 
   if (
@@ -1348,7 +1482,7 @@ function getTripImage(
       'indonesia'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900';
+    return 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=900&q=80';
   }
 
   if (
@@ -1359,7 +1493,7 @@ function getTripImage(
       'korea'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1538485399081-7c897003c6e5?w=900';
+    return 'https://images.unsplash.com/photo-1517154421773-0529f29ea451?auto=format&fit=crop&w=900&q=80';
   }
 
   if (
@@ -1370,10 +1504,10 @@ function getTripImage(
       'england'
     )
   ) {
-    return 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900';
+    return 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=900&q=80';
   }
 
-  return 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=900';
+  return 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80';
 }
 
 // ==========================================================
@@ -1384,74 +1518,65 @@ const styles =
   StyleSheet.create({
     container: {
       flex: 1,
+
       backgroundColor:
         '#FFFFFF',
     },
 
     safeArea: {
       flex: 1,
+
       paddingHorizontal:
-        22,
+        20,
     },
 
-    // ======================================================
+    // ------------------------------------------------------
     // HEADER
-    // ======================================================
+    // ------------------------------------------------------
 
     header: {
-      paddingTop: 22,
-      paddingBottom: 18,
+      paddingTop: 20,
 
-      flexDirection:
-        'row',
-
-      alignItems:
-        'flex-start',
-
-      justifyContent:
-        'space-between',
-    },
-
-    headerTextContainer: {
-      flex: 1,
-      paddingRight: 16,
+      paddingBottom:
+        18,
     },
 
     title: {
-      fontSize: 38,
-      lineHeight: 44,
+      fontSize: 34,
 
-      fontWeight: '800',
+      lineHeight: 40,
 
-      letterSpacing: -1,
+      fontWeight:
+        '800',
 
-      color: '#111827',
+      letterSpacing:
+        -0.8,
+
+      color:
+        '#0F172A',
     },
 
     subtitle: {
-      marginTop: 4,
+      marginTop: 3,
 
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: 13,
 
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
-    buttonPressed: {
-      opacity: 0.75,
-    },
-
-    // ======================================================
+    // ------------------------------------------------------
     // PRIVATE BANNER
-    // ======================================================
+    // ------------------------------------------------------
 
     privateBanner: {
-      minHeight: 70,
+      minHeight: 76,
 
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingHorizontal:
+        14,
 
-      marginBottom: 4,
+      paddingVertical:
+        12,
 
       flexDirection:
         'row',
@@ -1459,17 +1584,17 @@ const styles =
       alignItems:
         'center',
 
-      borderRadius: 17,
+      borderRadius:
+        18,
 
       backgroundColor:
-        '#F4F7FF',
+        '#F0F0FF',
     },
 
     privateIconContainer: {
-      width: 40,
-      height: 40,
+      width: 42,
 
-      borderRadius: 12,
+      height: 42,
 
       alignItems:
         'center',
@@ -1477,46 +1602,58 @@ const styles =
       justifyContent:
         'center',
 
+      borderRadius:
+        13,
+
       backgroundColor:
-        '#E5EEFF',
+        '#FFFFFF',
     },
 
     privateTextContainer: {
       flex: 1,
 
-      marginLeft: 11,
+      marginLeft: 12,
+
+      paddingRight: 8,
     },
 
     privateTitle: {
       fontSize: 13,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      color: '#111827',
+      color:
+        '#111827',
     },
 
     privateDescription: {
       marginTop: 2,
 
       fontSize: 11,
-      lineHeight: 16,
 
-      color: '#6B7280',
+      lineHeight: 15,
+
+      color:
+        '#6B7280',
     },
 
     tripCountBadge: {
       minWidth: 34,
+
       height: 34,
 
-      paddingHorizontal: 8,
-
-      borderRadius: 17,
+      paddingHorizontal:
+        8,
 
       alignItems:
         'center',
 
       justifyContent:
         'center',
+
+      borderRadius:
+        17,
 
       backgroundColor:
         '#FFFFFF',
@@ -1525,31 +1662,132 @@ const styles =
     tripCountText: {
       fontSize: 13,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      color: '#1769E8',
+      color:
+        '#4F46E5',
     },
 
-    // ======================================================
-    // LIST
-    // ======================================================
+    // ------------------------------------------------------
+    // FILTER TABS
+    // ------------------------------------------------------
 
-    list: {
-      paddingTop: 14,
-
-      paddingBottom: 120,
-
-      gap: 12,
-    },
-
-    createTripButton: {
-      minHeight: 48,
+    tabsRow: {
+      height: 52,
 
       marginTop: 8,
-      marginBottom: 18,
 
       flexDirection:
         'row',
+
+      alignItems:
+        'flex-end',
+
+      borderBottomWidth:
+        StyleSheet.hairlineWidth,
+
+      borderBottomColor:
+        '#D1D5DB',
+    },
+
+    filterButton: {
+      flex: 1,
+
+      height: 52,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'flex-end',
+    },
+
+    filterText: {
+      paddingBottom:
+        12,
+
+      fontSize: 14,
+
+      fontWeight:
+        '500',
+
+      color:
+        '#4B5563',
+    },
+
+    filterTextActive: {
+      fontWeight:
+        '700',
+
+      color:
+        '#111827',
+    },
+
+    filterUnderline: {
+      position:
+        'absolute',
+
+      bottom: -1,
+
+      width: '78%',
+
+      height: 2,
+
+      backgroundColor:
+        '#4F46E5',
+    },
+
+    // ------------------------------------------------------
+    // LIST
+    // ------------------------------------------------------
+
+    listContainer: {
+      flex: 1,
+    },
+
+    list: {
+      paddingTop: 16,
+
+      paddingBottom:
+        14,
+
+      gap: 10,
+    },
+
+    emptyFilteredList: {
+      flexGrow: 1,
+    },
+
+    // ------------------------------------------------------
+    // SWIPE CARD
+    // ------------------------------------------------------
+
+    swipeContainer: {
+      position:
+        'relative',
+
+      overflow:
+        'hidden',
+
+      borderRadius:
+        15,
+
+      backgroundColor:
+        '#EF5350',
+    },
+
+    deleteAction: {
+      position:
+        'absolute',
+
+      top: 0,
+
+      right: 0,
+
+      bottom: 0,
+
+      width: 82,
 
       alignItems:
         'center',
@@ -1557,56 +1795,34 @@ const styles =
       justifyContent:
         'center',
 
-      borderRadius: 10,
-
       backgroundColor:
-        '#1769E8',
-
-      shadowColor:
-        '#1769E8',
-
-      shadowOpacity: 0.14,
-
-      shadowRadius: 6,
-
-      shadowOffset: {
-        width: 0,
-        height: 3,
-      },
-
-      elevation: 3,
+        '#EF5350',
     },
 
-    createTripButtonPressed: {
-      opacity: 0.82,
-
-      transform: [
-        {
-          scale: 0.99,
-        },
-      ],
+    deleteActionPressed: {
+      opacity: 0.8,
     },
 
-    createTripButtonText: {
-      marginLeft: 6,
+    deleteActionText: {
+      marginTop: 3,
 
-      fontSize: 12,
+      fontSize: 10,
 
-      fontWeight: '800',
+      fontWeight:
+        '700',
 
-      letterSpacing: 0.35,
-
-      color: '#FFFFFF',
+      color:
+        '#FFFFFF',
     },
-
-    // ======================================================
-    // TRIP CARD
-    // ======================================================
 
     tripCard: {
-      minHeight: 126,
+      minHeight: 84,
 
-      padding: 11,
+      paddingHorizontal:
+        12,
+
+      paddingVertical:
+        10,
 
       flexDirection:
         'row',
@@ -1617,9 +1833,10 @@ const styles =
       borderWidth: 1,
 
       borderColor:
-        '#E5E7EB',
+        '#E3E6ED',
 
-      borderRadius: 18,
+      borderRadius:
+        15,
 
       backgroundColor:
         '#FFFFFF',
@@ -1627,34 +1844,49 @@ const styles =
       shadowColor:
         '#000000',
 
-      shadowOpacity: 0.06,
+      shadowOpacity:
+        0.035,
 
-      shadowRadius: 7,
+      shadowRadius: 4,
 
       shadowOffset: {
         width: 0,
-        height: 3,
+
+        height: 2,
       },
 
-      elevation: 2,
+      elevation: 1,
     },
 
     tripCardPressed: {
-      opacity: 0.78,
-
-      transform: [
-        {
-          scale: 0.99,
-        },
-      ],
+      opacity: 0.82,
     },
 
     tripImage: {
-      width: 96,
+      width: 62,
 
-      height: 104,
+      height: 62,
 
-      borderRadius: 14,
+      borderRadius:
+        12,
+
+      backgroundColor:
+        '#E5E7EB',
+    },
+
+    tripImagePlaceholder: {
+      width: 62,
+
+      height: 62,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius:
+        12,
 
       backgroundColor:
         '#E5E7EB',
@@ -1667,197 +1899,38 @@ const styles =
 
       marginLeft: 12,
 
-      alignSelf:
-        'stretch',
-
-      justifyContent:
-        'center',
+      marginRight: 8,
     },
 
-    statusRow: {
-      minHeight: 23,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    compactStatusBadge: {
+    statusBadge: {
       alignSelf:
         'flex-start',
 
-      paddingHorizontal: 8,
+      paddingHorizontal:
+        8,
 
-      paddingVertical: 4,
+      paddingVertical:
+        3,
 
-      borderRadius: 12,
+      borderRadius:
+        10,
     },
 
-    compactStatusText: {
+    statusBadgeText: {
       fontSize: 9,
 
-      fontWeight: '800',
-    },
-
-    pastTripBadge: {
-      backgroundColor:
-        '#EEF4FF',
-    },
-
-    pastTripText: {
-      color: '#1769E8',
-    },
-
-    tripTitle: {
-      marginTop: 2,
-
-      marginBottom: 4,
-
-      fontSize: 18,
-
-      fontWeight: '800',
-
-      letterSpacing: -0.25,
-
-      color: '#111827',
-    },
-
-    infoRow: {
-      minHeight: 20,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    infoText: {
-      flex: 1,
-
-      marginLeft: 5,
-
-      fontSize: 11,
-
-      color: '#6B7280',
-    },
-
-    durationRow: {
-      minHeight: 20,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-    },
-
-    durationText: {
-      marginLeft: 5,
-
-      fontSize: 11,
-
-      fontWeight: '700',
-
-      color: '#1769E8',
-    },
-
-    cardActions: {
-      width: 38,
-
-      alignSelf:
-        'stretch',
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'space-between',
-
-      paddingVertical: 4,
-
-      marginLeft: 4,
-    },
-
-    deleteTripButton: {
-      width: 32,
-
-      height: 32,
-
-      borderRadius: 11,
-
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        '#FEF2F2',
-    },
-
-    deleteTripButtonPressed: {
-      opacity: 0.7,
-
-      transform: [
-        {
-          scale: 0.95,
-        },
-      ],
-    },
-
-    deleteTripButtonDisabled: {
-      opacity: 0.55,
-    },
-
-    // ======================================================
-    // STATUS BADGES
-    // ======================================================
-
-    statusBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-
-      flexDirection:
-        'row',
-
-      alignItems:
-        'center',
-
-      borderRadius: 20,
-    },
-
-    statusDot: {
-      width: 6,
-      height: 6,
-
-      marginRight: 6,
-
-      borderRadius: 3,
-    },
-
-    statusText: {
-      fontSize: 9,
-
-      fontWeight: '800',
-
-      letterSpacing: 0.6,
+      fontWeight:
+        '700',
     },
 
     upcomingBadge: {
       backgroundColor:
-        '#EFF6FF',
-    },
-
-    upcomingDot: {
-      backgroundColor:
-        '#1769E8',
+        '#ECEBFF',
     },
 
     upcomingText: {
-      color: '#1769E8',
+      color:
+        '#4F46E5',
     },
 
     ongoingBadge: {
@@ -1865,13 +1938,9 @@ const styles =
         '#ECFDF5',
     },
 
-    ongoingDot: {
-      backgroundColor:
-        '#059669',
-    },
-
     ongoingText: {
-      color: '#047857',
+      color:
+        '#047857',
     },
 
     pastBadge: {
@@ -1879,18 +1948,145 @@ const styles =
         '#F3F4F6',
     },
 
-    pastDot: {
-      backgroundColor:
-        '#9CA3AF',
-    },
-
     pastText: {
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
-    // ======================================================
+    tripTitle: {
+      marginTop: 3,
+
+      fontSize: 16,
+
+      fontWeight:
+        '800',
+
+      color:
+        '#111827',
+    },
+
+    tripMetaText: {
+      marginTop: 3,
+
+      fontSize: 11,
+
+      color:
+        '#4B5563',
+    },
+
+    // ------------------------------------------------------
+    // SWIPE HINT
+    // ------------------------------------------------------
+
+    swipeHint: {
+      minHeight: 42,
+
+      marginTop: 4,
+
+      marginBottom:
+        14,
+
+      paddingHorizontal:
+        14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderStyle:
+        'dashed',
+
+      borderColor:
+        '#D7DAE2',
+
+      borderRadius:
+        13,
+    },
+
+    swipeHintText: {
+      marginLeft: 8,
+
+      fontSize: 11,
+
+      color:
+        '#6B7280',
+    },
+
+    // ------------------------------------------------------
+    // CREATE TRIP
+    // ------------------------------------------------------
+
+    createTripButton: {
+      minHeight: 52,
+
+      marginBottom:
+        14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderRadius:
+        13,
+
+      backgroundColor:
+        '#4F46E5',
+
+      shadowColor:
+        '#4F46E5',
+
+      shadowOpacity:
+        0.22,
+
+      shadowRadius:
+        10,
+
+      shadowOffset: {
+        width: 0,
+
+        height: 5,
+      },
+
+      elevation: 5,
+    },
+
+    createTripButtonPressed: {
+      opacity: 0.78,
+
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+
+    createTripButtonText: {
+      marginLeft: 7,
+
+      fontSize: 14,
+
+      fontWeight:
+        '800',
+
+      color:
+        '#FFFFFF',
+    },
+
+    // ------------------------------------------------------
     // LOADING
-    // ======================================================
+    // ------------------------------------------------------
 
     loadingContainer: {
       flex: 1,
@@ -1901,7 +2097,8 @@ const styles =
       justifyContent:
         'center',
 
-      paddingBottom: 100,
+      paddingBottom:
+        100,
     },
 
     loadingText: {
@@ -1909,12 +2106,13 @@ const styles =
 
       fontSize: 12,
 
-      color: '#9CA3AF',
+      color:
+        '#9CA3AF',
     },
 
-    // ======================================================
-    // EMPTY STATE
-    // ======================================================
+    // ------------------------------------------------------
+    // EMPTY STATES
+    // ------------------------------------------------------
 
     emptyContainer: {
       flex: 1,
@@ -1925,15 +2123,17 @@ const styles =
       justifyContent:
         'center',
 
-      paddingHorizontal: 30,
-      paddingBottom: 100,
+      paddingHorizontal:
+        30,
+
+      paddingBottom:
+        100,
     },
 
     emptyIconContainer: {
       width: 76,
-      height: 76,
 
-      borderRadius: 24,
+      height: 76,
 
       alignItems:
         'center',
@@ -1941,8 +2141,11 @@ const styles =
       justifyContent:
         'center',
 
+      borderRadius:
+        24,
+
       backgroundColor:
-        '#EEF4FF',
+        '#EEEEFF',
     },
 
     emptyTitle: {
@@ -1950,9 +2153,11 @@ const styles =
 
       fontSize: 20,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      color: '#111827',
+      color:
+        '#111827',
     },
 
     emptyText: {
@@ -1964,17 +2169,20 @@ const styles =
         'center',
 
       fontSize: 13,
+
       lineHeight: 19,
 
-      color: '#6B7280',
+      color:
+        '#6B7280',
     },
 
     emptyButton: {
-      height: 46,
+      minHeight: 48,
 
       marginTop: 20,
 
-      paddingHorizontal: 18,
+      paddingHorizontal:
+        20,
 
       flexDirection:
         'row',
@@ -1985,10 +2193,11 @@ const styles =
       justifyContent:
         'center',
 
-      borderRadius: 14,
+      borderRadius:
+        13,
 
       backgroundColor:
-        '#1769E8',
+        '#4F46E5',
     },
 
     emptyButtonText: {
@@ -1996,8 +2205,35 @@ const styles =
 
       fontSize: 13,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      color: '#FFFFFF',
+      color:
+        '#FFFFFF',
+    },
+
+    filteredEmpty: {
+      flex: 1,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      paddingVertical:
+        40,
+    },
+
+    filteredEmptyText: {
+      marginTop: 8,
+
+      fontSize: 13,
+
+      fontWeight:
+        '600',
+
+      color:
+        '#9CA3AF',
     },
   });

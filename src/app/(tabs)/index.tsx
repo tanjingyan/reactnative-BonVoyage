@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ImageBackground,
   Modal,
   Pressable,
   ScrollView,
@@ -768,82 +767,6 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* HERO */}
-
-        <ImageBackground
-          source={{
-            uri:
-              'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=85',
-          }}
-          style={styles.hero}
-          imageStyle={
-            styles.heroImage
-          }
-        >
-          <View
-            style={
-              styles.heroOverlay
-            }
-          />
-
-          <View
-            style={
-              styles.heroContent
-            }
-          >
-            <Text
-              style={
-                styles.heroSmallText
-              }
-            >
-              YOUR JOURNEY STARTS HERE
-            </Text>
-
-            <Text
-              style={
-                styles.heroTitle
-              }
-            >
-              Plan your next{'\n'}
-              adventure
-            </Text>
-
-            <Text
-              style={
-                styles.heroDescription
-              }
-            >
-              Build and organise your
-              entire trip in one place.
-            </Text>
-
-            <Pressable
-              style={
-                styles.heroButton
-              }
-              onPress={() =>
-                router.push(
-                  '/create-trip'
-                )
-              }
-            >
-              <Ionicons
-                name="add"
-                size={20}
-                color="#FFFFFF"
-              />
-
-              <Text
-                style={
-                  styles.heroButtonText
-                }
-              >
-                Create new trip
-              </Text>
-            </Pressable>
-          </View>
-        </ImageBackground>
-
         {/* QUICK ACTIONS */}
 
         <View
@@ -864,24 +787,17 @@ export default function HomeScreen() {
               styles.sectionSubtitle
             }
           >
-            Everything you need in one
-            place
+            Quick access to your travel plans
           </Text>
         </View>
 
-        <View
-          style={
-            styles.quickActions
-          }
-        >
+        <View style={styles.quickActionsGrid}>
+          {/* MY TRIPS */}
+
           <Pressable
-            style={
-              styles.quickAction
-            }
+            style={styles.quickAction}
             onPress={() =>
-              router.push(
-                '/create-trip'
-              )
+              router.push('/trips')
             }
           >
             <View
@@ -891,38 +807,44 @@ export default function HomeScreen() {
               ]}
             >
               <Ionicons
-                name="add"
+                name="airplane-outline"
                 size={25}
                 color="#1769E8"
               />
             </View>
 
-            <Text
-              style={
-                styles.quickTitle
-              }
-            >
-              New Trip
+            <Text style={styles.quickTitle}>
+              My Trips
             </Text>
 
-            <Text
-              style={
-                styles.quickDescription
-              }
-            >
-              Start planning
+            <Text style={styles.quickDescription}>
+              Manage trips
             </Text>
           </Pressable>
 
+          {/* ADD ACTIVITY */}
+
           <Pressable
-            style={
-              styles.quickAction
-            }
-            onPress={() =>
-              router.push(
-                '/trips'
-              )
-            }
+            style={styles.quickAction}
+            onPress={() => {
+              if (!primaryTrip) {
+                Alert.alert(
+                  'No Trip Yet',
+                  'Create a trip before adding an activity.'
+                );
+
+                return;
+              }
+
+              router.push({
+                pathname:
+                  '/trip/[id]/add-activity',
+
+                params: {
+                  id: primaryTrip.id,
+                },
+              });
+            }}
           >
             <View
               style={[
@@ -937,23 +859,90 @@ export default function HomeScreen() {
               />
             </View>
 
-            <Text
-              style={
-                styles.quickTitle
-              }
-            >
-              My Trips
+            <Text style={styles.quickTitle}>
+              Add Activity
             </Text>
 
-            <Text
-              style={
-                styles.quickDescription
-              }
-            >
-              View itineraries
+            <Text style={styles.quickDescription}>
+              Plan itinerary
             </Text>
           </Pressable>
 
+          {/* TRIP MAP */}
+
+          <Pressable
+            style={styles.quickAction}
+            onPress={() => {
+              if (!primaryTrip) {
+                Alert.alert(
+                  'No Trip Yet',
+                  'Create a trip before opening the trip map.'
+                );
+
+                return;
+              }
+
+              router.push({
+                pathname:
+                  '/trip/[id]/map',
+
+                params: {
+                  id: primaryTrip.id,
+                },
+              });
+            }}
+          >
+            <View
+              style={[
+                styles.quickIcon,
+                styles.greenIcon,
+              ]}
+            >
+              <Ionicons
+                name="map-outline"
+                size={24}
+                color="#059669"
+              />
+            </View>
+
+            <Text style={styles.quickTitle}>
+              Trip Map
+            </Text>
+
+            <Text style={styles.quickDescription}>
+              View locations
+            </Text>
+          </Pressable>
+
+          {/* SAVED */}
+
+          <Pressable
+            style={styles.quickAction}
+            onPress={() =>
+              router.push('/profile')
+            }
+          >
+            <View
+              style={[
+                styles.quickIcon,
+                styles.orangeIcon,
+              ]}
+            >
+              <Ionicons
+                name="bookmark-outline"
+                size={24}
+                color="#EA580C"
+              />
+            </View>
+
+            <Text style={styles.quickTitle}>
+              Saved
+            </Text>
+
+            <Text style={styles.quickDescription}>
+              Places & guides
+            </Text>
+          </Pressable>
         </View>
 
         {/* TRAVEL INSPIRATION */}
@@ -1759,100 +1748,6 @@ const styles =
       marginTop: 3,
     },
 
-    hero: {
-      height: 315,
-
-      marginHorizontal: 22,
-
-      justifyContent:
-        'flex-end',
-    },
-
-    heroImage: {
-      borderRadius: 22,
-    },
-
-    heroOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-
-      backgroundColor: 'rgba(0,0,0,0.35)',
-
-      borderRadius: 22,
-    },
-
-    heroContent: {
-      padding: 23,
-    },
-
-    heroSmallText: {
-      color: '#E5E7EB',
-
-      fontSize: 10,
-
-      fontWeight: '700',
-
-      letterSpacing: 1.2,
-
-      marginBottom: 7,
-    },
-
-    heroTitle: {
-      color: '#FFFFFF',
-
-      fontSize: 34,
-
-      lineHeight: 38,
-
-      fontWeight: '800',
-
-      letterSpacing: -0.7,
-    },
-
-    heroDescription: {
-      color: '#F3F4F6',
-
-      fontSize: 13,
-
-      lineHeight: 19,
-
-      maxWidth: 250,
-
-      marginTop: 9,
-    },
-
-    heroButton: {
-      flexDirection: 'row',
-
-      alignItems: 'center',
-
-      alignSelf: 'flex-start',
-
-      gap: 5,
-
-      marginTop: 18,
-
-      backgroundColor:
-        '#1769E8',
-
-      paddingHorizontal: 17,
-
-      paddingVertical: 12,
-
-      borderRadius: 24,
-    },
-
-    heroButtonText: {
-      color: '#FFFFFF',
-
-      fontSize: 14,
-
-      fontWeight: '700',
-    },
-
     largeSectionHeader: {
       paddingHorizontal: 22,
 
@@ -1861,18 +1756,23 @@ const styles =
       marginBottom: 15,
     },
 
-    quickActions: {
+    quickActionsGrid: {
       paddingHorizontal: 22,
 
       flexDirection: 'row',
 
-      gap: 10,
+      flexWrap: 'wrap',
+
+      justifyContent:
+        'space-between',
+
+      rowGap: 10,
     },
 
     quickAction: {
-      flex: 1,
+      width: '48.5%',
 
-      minHeight: 123,
+      height: 126,
 
       borderWidth: 1,
 
@@ -1915,6 +1815,11 @@ const styles =
     greenIcon: {
       backgroundColor:
         '#ECFDF5',
+    },
+
+    orangeIcon: {
+      backgroundColor:
+        '#FFF7ED',
     },
 
     quickTitle: {

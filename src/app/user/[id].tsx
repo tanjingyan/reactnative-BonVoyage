@@ -7,6 +7,7 @@ import {
 
 import {
   collection,
+  doc,
   onSnapshot,
   query,
   where,
@@ -40,6 +41,15 @@ import {
 // TYPES
 // ==========================================================
 
+type PublicProfile = {
+  userId: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  location: string;
+  photoURL: string | null;
+};
+
 type Guide = {
   id: string;
   userId: string;
@@ -69,12 +79,29 @@ export default function TravellerProfileScreen() {
       id: string;
       displayName?: string;
       username?: string;
+      photoURL?: string;
+      bio?: string;
+      location?: string;
     }>();
 
   const userId =
     typeof params.id === 'string'
       ? params.id
       : '';
+
+  const [
+    publicProfile,
+    setPublicProfile,
+  ] =
+    useState<PublicProfile | null>(
+      null
+    );
+
+  const [
+    profileLoading,
+    setProfileLoading,
+  ] =
+    useState(true);
 
   const [
     guides,
@@ -87,6 +114,116 @@ export default function TravellerProfileScreen() {
   ] = useState(true);
 
   // ========================================================
+  // LOAD THIS TRAVELLER'S PUBLIC PROFILE
+  // ========================================================
+  //
+  // publicProfiles/{uid} contains only the safe social fields
+  // that can be shown to other signed-in BonVoyage users.
+  // Using onSnapshot keeps this screen in sync whenever the
+  // account owner changes their name, bio, location or photo.
+  // ========================================================
+
+  useEffect(() => {
+    if (!userId) {
+      setPublicProfile(
+        null
+      );
+
+      setProfileLoading(
+        false
+      );
+
+      return;
+    }
+
+    setProfileLoading(
+      true
+    );
+
+    const publicProfileRef =
+      doc(
+        db,
+        'publicProfiles',
+        userId
+      );
+
+    const unsubscribe =
+      onSnapshot(
+        publicProfileRef,
+
+        snapshot => {
+          if (
+            snapshot.exists()
+          ) {
+            const data =
+              snapshot.data();
+
+            setPublicProfile({
+              userId:
+                snapshot.id,
+
+              displayName:
+                String(
+                  data.displayName ??
+                  'BonVoyage Traveller'
+                ),
+
+              username:
+                String(
+                  data.username ??
+                  'traveller'
+                ),
+
+              bio:
+                String(
+                  data.bio ??
+                  ''
+                ),
+
+              location:
+                String(
+                  data.location ??
+                  ''
+                ),
+
+              photoURL:
+                data.photoURL
+                  ? String(
+                      data.photoURL
+                    )
+                  : null,
+            });
+          } else {
+            setPublicProfile(
+              null
+            );
+          }
+
+          setProfileLoading(
+            false
+          );
+        },
+
+        error => {
+          console.error(
+            'Load public profile error:',
+            error
+          );
+
+          setPublicProfile(
+            null
+          );
+
+          setProfileLoading(
+            false
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [userId]);
+
+  // ========================================================
   // LOAD THIS TRAVELLER'S PUBLISHED GUIDES
   // ========================================================
 
@@ -97,10 +234,9 @@ export default function TravellerProfileScreen() {
     }
 
     /*
-     * The existing /users/{uid} documents are private in the
-     * BonVoyage Firestore rules, so this public profile is built
-     * only from PUBLISHED guide data. This avoids exposing email
-     * addresses or other private account information.
+     * Published guides are loaded separately from the traveller's
+     * public social profile. Private users/{uid} data remains
+     * protected by Firestore rules.
      */
     const publishedGuidesQuery =
       query(
@@ -168,24 +304,77 @@ export default function TravellerProfileScreen() {
   const firstGuide =
     guides[0];
 
-  const displayName =
+  const routeDisplayName =
     typeof params.displayName ===
       'string' &&
     params.displayName.trim()
-      ? params.displayName
-      : firstGuide?.creatorName ||
-        'BonVoyage Traveller';
+      ? params.displayName.trim()
+      : '';
 
-  const username =
+  const routeUsername =
     typeof params.username ===
       'string' &&
     params.username.trim()
-      ? params.username.replace(
-          /^@/,
-          ''
-        )
-      : firstGuide?.creatorUsername ||
-        'traveller';
+      ? params.username
+          .trim()
+          .replace(
+            /^@/,
+            ''
+          )
+      : '';
+
+  const routePhotoURL =
+    typeof params.photoURL ===
+      'string' &&
+    params.photoURL.trim()
+      ? params.photoURL.trim()
+      : null;
+
+  const routeBio =
+    typeof params.bio ===
+      'string'
+      ? params.bio.trim()
+      : '';
+
+  const routeLocation =
+    typeof params.location ===
+      'string'
+      ? params.location.trim()
+      : '';
+
+  /*
+   * publicProfiles is the main source of truth.
+   * Route params and guide creator data are fallbacks so the
+   * screen can still render for older accounts or while the
+   * public profile document is being created.
+   */
+
+  const displayName =
+    publicProfile?.displayName ||
+    routeDisplayName ||
+    firstGuide?.creatorName ||
+    'BonVoyage Traveller';
+
+  const username =
+    publicProfile?.username ||
+    routeUsername ||
+    firstGuide?.creatorUsername ||
+    'traveller';
+
+  const bio =
+    publicProfile?.bio ||
+    routeBio ||
+    'BonVoyage traveller sharing itinerary-style travel guides.';
+
+  const location =
+    publicProfile?.location ||
+    routeLocation ||
+    '';
+
+  const photoURL =
+    publicProfile?.photoURL ||
+    routePhotoURL ||
+    null;
 
   const initials =
     getInitials(
@@ -281,13 +470,31 @@ export default function TravellerProfileScreen() {
                 styles.avatar
               }
             >
-              <Text
-                style={
-                  styles.avatarText
-                }
-              >
-                {initials}
-              </Text>
+              {profileLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#1769E8"
+                />
+              ) : photoURL ? (
+                <Image
+                  source={{
+                    uri:
+                      photoURL,
+                  }}
+                  style={
+                    styles.avatarImage
+                  }
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.avatarText
+                  }
+                >
+                  {initials}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -312,8 +519,31 @@ export default function TravellerProfileScreen() {
               styles.profileDescription
             }
           >
-            BonVoyage traveller sharing itinerary-style travel guides.
+            {bio}
           </Text>
+
+          {location ? (
+            <View
+              style={
+                styles.publicLocationRow
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={15}
+                color="#6B7280"
+              />
+
+              <Text
+                style={
+                  styles.publicLocationText
+                }
+                numberOfLines={1}
+              >
+                {location}
+              </Text>
+            </View>
+          ) : null}
 
           {destinations.length >
           0 ? (
@@ -823,11 +1053,17 @@ const styles =
       width: 76,
       height: 76,
       borderRadius: 38,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent:
         'center',
       backgroundColor:
         '#DBEAFE',
+    },
+
+    avatarImage: {
+      width: '100%',
+      height: '100%',
     },
 
     avatarText: {
@@ -856,6 +1092,24 @@ const styles =
       fontSize: 14,
       lineHeight: 20,
       color: '#374151',
+    },
+
+    publicLocationRow: {
+      marginTop: 8,
+      maxWidth: 300,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'center',
+      gap: 5,
+    },
+
+    publicLocationText: {
+      flexShrink: 1,
+      textAlign: 'center',
+      fontSize: 12,
+      lineHeight: 17,
+      color: '#6B7280',
     },
 
     destinationSummary: {
