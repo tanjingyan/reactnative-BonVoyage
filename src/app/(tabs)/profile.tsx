@@ -2226,26 +2226,6 @@ export default function ProfileScreen() {
                       }
                     />
 
-                    <SettingsItem
-                      icon="notifications-outline"
-                      title="Notifications"
-                      onPress={() =>
-                        showComingSoon(
-                          'Notifications'
-                        )
-                      }
-                    />
-
-                    <SettingsItem
-                      icon="help-circle-outline"
-                      title="Help & Support"
-                      onPress={() =>
-                        showComingSoon(
-                          'Help & Support'
-                        )
-                      }
-                      last
-                    />
                   </View>
 
                   <Pressable

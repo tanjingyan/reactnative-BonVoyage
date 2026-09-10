@@ -904,6 +904,29 @@ export default function ExploreScreen() {
     return unsubscribe;
   }, []);
 
+  /*
+   * Explore is for discovering content from other BonVoyage
+   * users. The currently logged-in user's own guides remain
+   * available from Profile, but are hidden from Explore.
+   */
+  const currentUserId =
+    auth.currentUser?.uid ??
+    '';
+
+  const discoverableGuides =
+    useMemo(
+      () =>
+        guides.filter(
+          guide =>
+            guide.userId !==
+            currentUserId
+        ),
+      [
+        guides,
+        currentUserId,
+      ]
+    );
+
   const filteredGuides =
     useMemo(() => {
       const search =
@@ -912,27 +935,18 @@ export default function ExploreScreen() {
         );
 
       if (!search) {
-        return guides;
+        return discoverableGuides;
       }
 
-      return guides.filter(
+      return discoverableGuides.filter(
         guide => {
-          const publicProfile =
-            publicProfiles[
-              guide.userId
-            ];
-
           const searchable =
             [
               guide.title,
               guide.destination,
               guide.caption,
-              publicProfile
-                ?.displayName ??
-                guide.creatorName,
-              publicProfile
-                ?.username ??
-                guide.creatorUsername,
+              guide.creatorName,
+              guide.creatorUsername,
             ]
               .join(' ')
               .toLowerCase();
@@ -943,20 +957,24 @@ export default function ExploreScreen() {
         }
       );
     }, [
-      guides,
-      publicProfiles,
+      discoverableGuides,
       searchText,
     ]);
 
+  /*
+   * People is built from the same discoverable guide list.
+   * Therefore the currently logged-in user is also excluded
+   * from Explore -> People.
+   */
   const travellers =
     useMemo(
       () =>
         buildTravellerSummaries(
-          guides,
+          discoverableGuides,
           publicProfiles
         ),
       [
-        guides,
+        discoverableGuides,
         publicProfiles,
       ]
     );
@@ -1681,19 +1699,39 @@ export default function ExploreScreen() {
           tripsQuery
         );
 
+      /*
+       * Only allow places to be added to trips that are still active
+       * or upcoming. A trip is considered past once its end date is
+       * before today's date.
+       */
+      const today =
+        startOfDay(
+          new Date()
+        );
+
       const tripList:
         TripOption[] =
-        snapshot.docs.map(
-          tripDocument => ({
-            id:
-              tripDocument.id,
+        snapshot.docs
+          .map(
+            tripDocument => ({
+              id:
+                tripDocument.id,
 
-            ...(tripDocument.data() as Omit<
-              TripOption,
-              'id'
-            >),
-          })
-        );
+              ...(tripDocument.data() as Omit<
+                TripOption,
+                'id'
+              >),
+            })
+          )
+          .filter(
+            trip =>
+              startOfDay(
+                parseStoredDate(
+                  trip.endDate
+                )
+              ).getTime() >=
+              today.getTime()
+          );
 
       tripList.sort(
         (a, b) =>
@@ -1720,10 +1758,21 @@ export default function ExploreScreen() {
           firstTrip.id
         );
 
+        const firstTripStart =
+          startOfDay(
+            parseStoredDate(
+              firstTrip.startDate
+            )
+          );
+
+        const defaultDate =
+          firstTripStart.getTime() <
+          today.getTime()
+            ? today
+            : firstTripStart;
+
         setActivityDate(
-          parseStoredDate(
-            firstTrip.startDate
-          )
+          defaultDate
         );
       }
     } catch (error) {
@@ -1793,10 +1842,23 @@ export default function ExploreScreen() {
       The user can change it with the date picker.
     */
 
+    const today =
+      startOfDay(
+        new Date()
+      );
+
+    const tripStart =
+      startOfDay(
+        parseStoredDate(
+          trip.startDate
+        )
+      );
+
     setActivityDate(
-      parseStoredDate(
-        trip.startDate
-      )
+      tripStart.getTime() <
+      today.getTime()
+        ? today
+        : tripStart
     );
 
     setShowDatePicker(
@@ -1953,6 +2015,38 @@ export default function ExploreScreen() {
       Alert.alert(
         'Trip unavailable',
         'The selected trip could not be found.'
+      );
+
+      return;
+    }
+
+    /*
+     * Safety check: even if the modal has been open while the trip
+     * ends, do not allow a new place to be written into a past trip.
+     */
+    const today =
+      startOfDay(
+        new Date()
+      );
+
+    const selectedTripEnd =
+      startOfDay(
+        parseStoredDate(
+          selectedTrip.endDate
+        )
+      );
+
+    if (
+      selectedTripEnd.getTime() <
+      today.getTime()
+    ) {
+      Alert.alert(
+        'Trip has ended',
+        'Places cannot be added to a past trip. Please choose an upcoming or in-progress trip.'
+      );
+
+      setSelectedTripId(
+        ''
       );
 
       return;
@@ -2763,7 +2857,7 @@ export default function ExploreScreen() {
                         styles.noTripsTitle
                       }
                     >
-                      No trips yet
+                      No available trips
                     </Text>
 
                     <Text
@@ -2771,7 +2865,7 @@ export default function ExploreScreen() {
                         styles.noTripsText
                       }
                     >
-                      Create a trip first, then come back to Explore to add places.
+                      Create a new trip to add this place to your itinerary. Past trips are not available for new activities.
                     </Text>
                   </View>
                 ) : (
@@ -5177,11 +5271,24 @@ function getSelectedTripDateRange(
     };
   }
 
-  return {
-    minimumDate:
+  const today =
+    startOfDay(
+      new Date()
+    );
+
+  const tripStart =
+    startOfDay(
       parseStoredDate(
         selectedTrip.startDate
-      ),
+      )
+    );
+
+  return {
+    minimumDate:
+      tripStart.getTime() <
+      today.getTime()
+        ? today
+        : tripStart,
 
     maximumDate:
       parseStoredDate(

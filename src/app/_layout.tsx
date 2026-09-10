@@ -41,9 +41,7 @@ function RootNavigator() {
         />
       </Stack.Protected>
 
-      {/* ===================================================== */}
       {/* LOGGED IN ROUTES                                     */}
-      {/* ===================================================== */}
 
       <Stack.Protected
         guard={!!user}

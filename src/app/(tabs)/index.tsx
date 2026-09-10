@@ -1160,7 +1160,8 @@ export default function HomeScreen() {
       </Pressable>
 
       {/* =====================================================
-          CREATE MENU
+          CREATE POPOVER MENU
+          Opens as a compact floating box above the + button.
       ====================================================== */}
 
       <Modal
@@ -1178,218 +1179,181 @@ export default function HomeScreen() {
       >
         <View
           style={
-            styles.createMenuBackdrop
+            styles.createMenuOverlay
           }
         >
-          {/* Decorative soft background shapes */}
+          {/* Tap outside the menu to close it */}
+
+          <Pressable
+            style={
+              StyleSheet.absoluteFill
+            }
+            onPress={() =>
+              setCreateMenuVisible(
+                false
+              )
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Close create menu"
+          />
+
+          {/* Floating menu box */}
 
           <View
             style={
-              styles.createMenuGlowTop
-            }
-          />
-
-          <View
-            style={
-              styles.createMenuGlowBottom
-            }
-          />
-
-          <SafeAreaView
-            style={
-              styles.createMenuSafeArea
+              styles.createPopover
             }
           >
-            {/* CLOSE BUTTON */}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.createMenuCloseButton,
-
-                pressed &&
-                  styles.createMenuPressed,
-              ]}
-              onPress={() =>
-                setCreateMenuVisible(
-                  false
-                )
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Close create menu"
-            >
-              <Ionicons
-                name="close"
-                size={27}
-                color="#111827"
-              />
-            </Pressable>
-
-            {/* CREATE OPTIONS */}
+            {/* Small pointer towards the + button */}
 
             <View
               style={
-                styles.createMenuContent
+                styles.createPopoverArrow
               }
+            />
+
+            {/* PLAN A TRIP */}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.createPopoverItem,
+
+                pressed &&
+                  styles.createPopoverItemPressed,
+              ]}
+              onPress={() => {
+                setCreateMenuVisible(
+                  false
+                );
+
+                setTimeout(
+                  () => {
+                    router.push(
+                      '/create-trip'
+                    );
+                  },
+                  120
+                );
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Plan a new trip"
             >
-              <Text
+              <View
+                style={[
+                  styles.createPopoverIcon,
+                  styles.createPopoverIconBlue,
+                ]}
+              >
+                <Ionicons
+                  name="airplane-outline"
+                  size={25}
+                  color="#1769E8"
+                />
+              </View>
+
+              <View
                 style={
-                  styles.createMenuHeading
+                  styles.createPopoverTextContainer
                 }
               >
-                What would you like to create?
-              </Text>
-
-              <Text
-                style={
-                  styles.createMenuSubheading
-                }
-              >
-                Plan, share and remember your travels.
-              </Text>
-
-              {/* PLAN TRIP */}
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.createMenuCard,
-
-                  pressed &&
-                    styles.createMenuPressed,
-                ]}
-                onPress={() => {
-                  setCreateMenuVisible(
-                    false
-                  );
-
-                  setTimeout(
-                    () => {
-                      router.push(
-                        '/create-trip'
-                      );
-                    },
-                    120
-                  );
-                }}
-              >
-                <View
+                <Text
                   style={
-                    styles.createMenuEmojiWrap
+                    styles.createPopoverTitle
                   }
                 >
-                  <Text
-                    style={
-                      styles.createMenuEmoji
-                    }
-                  >
-                    🧳
-                  </Text>
-                </View>
+                  Plan a trip
+                </Text>
 
-                <View
+                <Text
                   style={
-                    styles.createMenuCardContent
+                    styles.createPopoverDescription
                   }
                 >
-                  <Text
-                    style={
-                      styles.createMenuCardTitle
-                    }
-                  >
-                    Plan your trip
-                  </Text>
+                  Create your own private itinerary
+                </Text>
+              </View>
 
-                  <Text
-                    style={
-                      styles.createMenuCardDescription
-                    }
-                  >
-                    Choose places and build itineraries
-                  </Text>
-                </View>
+              <Ionicons
+                name="chevron-forward"
+                size={19}
+                color="#9CA3AF"
+              />
+            </Pressable>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={21}
-                  color="#9CA3AF"
-                />
-              </Pressable>
-
-              {/* WRITE GUIDE */}
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.createMenuCard,
-
-                  pressed &&
-                    styles.createMenuPressed,
-                ]}
-                onPress={() => {
-                  setCreateMenuVisible(
-                    false
-                  );
-
-                  setTimeout(
-                    () => {
-                      router.push(
-                        '/create-guide'
-                      );
-                    },
-                    120
-                  );
-                }}
-              >
-                <View
-                  style={
-                    styles.createMenuEmojiWrap
-                  }
-                >
-                  <Text
-                    style={
-                      styles.createMenuEmoji
-                    }
-                  >
-                    🧭
-                  </Text>
-                </View>
-
-                <View
-                  style={
-                    styles.createMenuCardContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.createMenuCardTitle
-                    }
-                  >
-                    Write a travel guide
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.createMenuCardDescription
-                    }
-                  >
-                    Share tips and inspire others
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={21}
-                  color="#9CA3AF"
-                />
-              </Pressable>
-            </View>
-
-            <Text
+            <View
               style={
-                styles.createMenuFooter
+                styles.createPopoverDivider
               }
+            />
+
+            {/* WRITE A TRAVEL GUIDE */}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.createPopoverItem,
+
+                pressed &&
+                  styles.createPopoverItemPressed,
+              ]}
+              onPress={() => {
+                setCreateMenuVisible(
+                  false
+                );
+
+                setTimeout(
+                  () => {
+                    router.push(
+                      '/create-guide'
+                    );
+                  },
+                  120
+                );
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Write a travel guide"
             >
-              BonVoyage
-            </Text>
-          </SafeAreaView>
+              <View
+                style={[
+                  styles.createPopoverIcon,
+                  styles.createPopoverIconOrange,
+                ]}
+              >
+                <Ionicons
+                  name="create-outline"
+                  size={25}
+                  color="#EA580C"
+                />
+              </View>
+
+              <View
+                style={
+                  styles.createPopoverTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.createPopoverTitle
+                  }
+                >
+                  Write a travel guide
+                </Text>
+
+                <Text
+                  style={
+                    styles.createPopoverDescription
+                  }
+                >
+                  Share guides and inspire others
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={19}
+                color="#9CA3AF"
+              />
+            </Pressable>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -1572,7 +1536,7 @@ const styles =
     tripCard: {
       marginHorizontal: 22,
 
-      marginBottom: 25,
+      marginBottom: 10,
 
       padding: 12,
 
@@ -1751,9 +1715,9 @@ const styles =
     largeSectionHeader: {
       paddingHorizontal: 22,
 
-      marginTop: 32,
+      marginTop: 12,
 
-      marginBottom: 15,
+      marginBottom: 5,
     },
 
     quickActionsGrid: {
@@ -1839,7 +1803,7 @@ const styles =
     },
 
     inspirationHeader: {
-      marginTop: 34,
+      marginTop: 15,
 
       marginBottom: 15,
 
@@ -1922,7 +1886,7 @@ const styles =
     smartBanner: {
       marginHorizontal: 22,
 
-      marginTop: 30,
+      marginTop: 15,
 
       padding: 18,
 
@@ -2039,191 +2003,122 @@ const styles =
     },
 
     // =======================================================
-    // CREATE MENU
+    // CREATE POPOVER MENU
     // =======================================================
 
-    createMenuBackdrop: {
+    createMenuOverlay: {
       flex: 1,
 
-      overflow: 'hidden',
-
       backgroundColor:
-        '#FFF4EF',
+        'rgba(0, 0, 0, 0.42)',
     },
 
     /*
-     * These two soft shapes imitate the peach / pink
-     * background from the reference without requiring
-     * another gradient package.
+     * Positioned above the existing floating + button so the
+     * interaction feels like a quick-create menu.
      */
-    createMenuGlowTop: {
+    createPopover: {
       position: 'absolute',
 
-      top: 110,
+      right: 18,
 
-      right: -120,
+      bottom: 195,
 
-      width: 360,
+      width: 300,
 
-      height: 360,
-
-      borderRadius: 180,
+      borderRadius: 17,
 
       backgroundColor:
-        '#FFE1D8',
+        '#FFFFFF',
 
-      opacity: 0.8,
-    },
-
-    createMenuGlowBottom: {
-      position: 'absolute',
-
-      bottom: 40,
-
-      left: -130,
-
-      width: 390,
-
-      height: 390,
-
-      borderRadius: 195,
-
-      backgroundColor:
-        '#FFD7CB',
-
-      opacity: 0.55,
-    },
-
-    createMenuSafeArea: {
-      flex: 1,
-
-      paddingHorizontal: 22,
-    },
-
-    createMenuCloseButton: {
-      width: 50,
-
-      height: 50,
-
-      marginTop: 12,
-
-      borderRadius: 25,
-
-      alignItems: 'center',
-
-      justifyContent:
-        'center',
-
-      backgroundColor:
-        'rgba(255,255,255,0.88)',
-
-      borderWidth: 1,
+      borderWidth:
+        StyleSheet.hairlineWidth,
 
       borderColor:
-        'rgba(255,255,255,0.95)',
+        '#E5E7EB',
 
       shadowColor: '#000',
 
-      shadowOpacity: 0.05,
+      shadowOpacity: 0.2,
 
-      shadowRadius: 8,
+      shadowRadius: 14,
 
       shadowOffset: {
         width: 0,
-        height: 3,
+        height: 6,
       },
 
-      elevation: 2,
+      elevation: 14,
     },
 
-    createMenuContent: {
-      flex: 1,
+    /*
+     * Small triangle on the lower-right edge of the box,
+     * visually connecting the menu to the + button.
+     */
+    createPopoverArrow: {
+      position: 'absolute',
 
-      justifyContent:
-        'center',
+      right: 23,
 
-      paddingBottom: 45,
+      bottom: -10,
+
+      width: 0,
+
+      height: 0,
+
+      borderLeftWidth: 10,
+
+      borderRightWidth: 10,
+
+      borderTopWidth: 10,
+
+      borderLeftColor:
+        'transparent',
+
+      borderRightColor:
+        'transparent',
+
+      borderTopColor:
+        '#FFFFFF',
     },
 
-    createMenuHeading: {
-      color: '#111827',
+    createPopoverItem: {
+      minHeight: 82,
 
-      fontSize: 27,
+      paddingHorizontal: 16,
 
-      fontWeight: '800',
-
-      letterSpacing: -0.6,
-
-      textAlign: 'center',
-    },
-
-    createMenuSubheading: {
-      marginTop: 6,
-
-      marginBottom: 25,
-
-      color: '#6B7280',
-
-      fontSize: 13,
-
-      lineHeight: 19,
-
-      textAlign: 'center',
-    },
-
-    createMenuCard: {
-      minHeight: 112,
-
-      marginBottom: 15,
-
-      paddingHorizontal: 18,
-
-      paddingVertical: 18,
-
-      borderRadius: 25,
-
-      borderWidth: 1.5,
-
-      borderColor:
-        'rgba(255,255,255,0.95)',
-
-      backgroundColor:
-        'rgba(255,255,255,0.82)',
+      paddingVertical: 14,
 
       flexDirection: 'row',
 
       alignItems: 'center',
 
-      shadowColor: '#000',
-
-      shadowOpacity: 0.035,
-
-      shadowRadius: 10,
-
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-
-      elevation: 2,
+      borderRadius: 17,
     },
 
-    createMenuPressed: {
-      opacity: 0.72,
-
-      transform: [
-        {
-          scale: 0.985,
-        },
-      ],
+    createPopoverItemPressed: {
+      backgroundColor:
+        '#F9FAFB',
     },
 
-    createMenuEmojiWrap: {
-      width: 60,
+    createPopoverDivider: {
+      height:
+        StyleSheet.hairlineWidth,
 
-      height: 60,
+      marginLeft: 72,
 
-      marginRight: 14,
+      backgroundColor:
+        '#E5E7EB',
+    },
+
+    createPopoverIcon: {
+      width: 44,
+
+      height: 44,
+
+      borderRadius: 12,
+
+      marginRight: 12,
 
       alignItems: 'center',
 
@@ -2231,53 +2126,37 @@ const styles =
         'center',
     },
 
-    createMenuEmoji: {
-      fontSize: 39,
+    createPopoverIconBlue: {
+      backgroundColor:
+        '#EEF4FF',
     },
 
-    createMenuCardContent: {
+    createPopoverIconOrange: {
+      backgroundColor:
+        '#FFF7ED',
+    },
+
+    createPopoverTextContainer: {
       flex: 1,
 
       paddingRight: 8,
     },
 
-    createMenuCardTitle: {
+    createPopoverTitle: {
       color: '#111827',
 
-      fontSize: 20,
+      fontSize: 16,
 
-      fontWeight: '800',
-
-      letterSpacing: -0.3,
+      fontWeight: '700',
     },
 
-    createMenuCardDescription: {
-      marginTop: 5,
+    createPopoverDescription: {
+      marginTop: 3,
 
       color: '#6B7280',
 
-      fontSize: 13,
+      fontSize: 12,
 
-      lineHeight: 19,
-    },
-
-    createMenuFooter: {
-      position: 'absolute',
-
-      left: 0,
-
-      right: 0,
-
-      bottom: 16,
-
-      color: '#9CA3AF',
-
-      fontSize: 11,
-
-      fontWeight: '700',
-
-      letterSpacing: 0.8,
-
-      textAlign: 'center',
+      lineHeight: 17,
     },
   });

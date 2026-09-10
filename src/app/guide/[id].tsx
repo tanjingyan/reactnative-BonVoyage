@@ -154,15 +154,28 @@ export default function GuideDetailsScreen() {
   const user =
     auth.currentUser;
 
+  /*
+   * The creator should not be able to save their own guide.
+   * This flag is also used to hide both save actions in the UI.
+   */
+  const isOwnGuide =
+    !!user &&
+    !!guide &&
+    guide.userId ===
+      user.uid;
+
   // The guide document currently stores the base save count.
-  // Since this user's saved state is stored separately under
-  // users/{uid}/savedGuides/{guideId}, include the current user's
-  // save in the number shown on this screen.
+  // For other users, include their current saved state in the
+  // number shown on this screen. For the guide creator, only
+  // show the guide's base save count.
   const displayedSaveCount =
     Math.max(
       0,
       (guide?.saveCount ?? 0) +
-        (isSaved ? 1 : 0)
+        (!isOwnGuide &&
+        isSaved
+          ? 1
+          : 0)
     );
 
   // ========================================================
@@ -512,7 +525,8 @@ export default function GuideDetailsScreen() {
   useEffect(() => {
     if (
       !user ||
-      !id
+      !id ||
+      isOwnGuide
     ) {
       setIsSaved(false);
       return;
@@ -549,6 +563,7 @@ export default function GuideDetailsScreen() {
   }, [
     user?.uid,
     id,
+    isOwnGuide,
   ]);
 
   const creatorName =
@@ -586,6 +601,18 @@ export default function GuideDetailsScreen() {
       !guide ||
       !id ||
       saveLoading
+    ) {
+      return;
+    }
+
+    /*
+     * Extra protection in case this function is called
+     * programmatically. The UI already hides the save buttons
+     * when the current user owns the guide.
+     */
+    if (
+      guide.userId ===
+      user.uid
     ) {
       return;
     }
@@ -829,50 +856,62 @@ export default function GuideDetailsScreen() {
           Travel Guide
         </Text>
 
-        <Pressable
-          style={[
-            styles.headerSaveButton,
-            isSaved &&
-              styles.headerSaveButtonActive,
-          ]}
-          onPress={() =>
-            void toggleSavedGuide()
-          }
-          disabled={
-            saveLoading
-          }
-          accessibilityRole="button"
-          accessibilityLabel={
-            isSaved
-              ? 'Remove guide from saved'
-              : 'Save travel guide'
-          }
-        >
-          {saveLoading ? (
-            <ActivityIndicator
-              size="small"
-              color={
-                isSaved
-                  ? '#FFFFFF'
-                  : '#1769E8'
-              }
-            />
-          ) : (
-            <Ionicons
-              name={
-                isSaved
-                  ? 'bookmark'
-                  : 'bookmark-outline'
-              }
-              size={20}
-              color={
-                isSaved
-                  ? '#FFFFFF'
-                  : '#1769E8'
-              }
-            />
-          )}
-        </Pressable>
+        {!isOwnGuide ? (
+          <Pressable
+            style={[
+              styles.headerSaveButton,
+              isSaved &&
+                styles.headerSaveButtonActive,
+            ]}
+            onPress={() =>
+              void toggleSavedGuide()
+            }
+            disabled={
+              saveLoading
+            }
+            accessibilityRole="button"
+            accessibilityLabel={
+              isSaved
+                ? 'Remove guide from saved'
+                : 'Save travel guide'
+            }
+          >
+            {saveLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={
+                  isSaved
+                    ? '#FFFFFF'
+                    : '#1769E8'
+                }
+              />
+            ) : (
+              <Ionicons
+                name={
+                  isSaved
+                    ? 'bookmark'
+                    : 'bookmark-outline'
+                }
+                size={20}
+                color={
+                  isSaved
+                    ? '#FFFFFF'
+                    : '#1769E8'
+                }
+              />
+            )}
+          </Pressable>
+        ) : (
+          /*
+           * Keep an invisible spacer the same size as the back
+           * button so "Travel Guide" remains visually centred.
+           */
+          <View
+            style={
+              styles.headerActionSpacer
+            }
+          />
+        )}
       </View>
 
       <ScrollView
@@ -1088,64 +1127,68 @@ export default function GuideDetailsScreen() {
             />
           </View>
 
-          {/* SAVE ACTION */}
+          {/* SAVE ACTION
+              Do not show this action when the logged-in user
+              is viewing their own published guide. */}
 
-          <Pressable
-            style={({
-              pressed,
-            }) => [
-              styles.saveGuideButton,
-              isSaved &&
-                styles.saveGuideButtonSaved,
-              pressed &&
-                styles.saveGuideButtonPressed,
-            ]}
-            onPress={() =>
-              void toggleSavedGuide()
-            }
-            disabled={
-              saveLoading
-            }
-          >
-            {saveLoading ? (
-              <ActivityIndicator
-                size="small"
-                color={
-                  isSaved
-                    ? '#FFFFFF'
-                    : '#1769E8'
-                }
-              />
-            ) : (
-              <>
-                <Ionicons
-                  name={
-                    isSaved
-                      ? 'bookmark'
-                      : 'bookmark-outline'
-                  }
-                  size={19}
+          {!isOwnGuide ? (
+            <Pressable
+              style={({
+                pressed,
+              }) => [
+                styles.saveGuideButton,
+                isSaved &&
+                  styles.saveGuideButtonSaved,
+                pressed &&
+                  styles.saveGuideButtonPressed,
+              ]}
+              onPress={() =>
+                void toggleSavedGuide()
+              }
+              disabled={
+                saveLoading
+              }
+            >
+              {saveLoading ? (
+                <ActivityIndicator
+                  size="small"
                   color={
                     isSaved
                       ? '#FFFFFF'
                       : '#1769E8'
                   }
                 />
+              ) : (
+                <>
+                  <Ionicons
+                    name={
+                      isSaved
+                        ? 'bookmark'
+                        : 'bookmark-outline'
+                    }
+                    size={19}
+                    color={
+                      isSaved
+                        ? '#FFFFFF'
+                        : '#1769E8'
+                    }
+                  />
 
-                <Text
-                  style={[
-                    styles.saveGuideButtonText,
-                    isSaved &&
-                      styles.saveGuideButtonTextSaved,
-                  ]}
-                >
-                  {isSaved
-                    ? 'Saved to profile'
-                    : 'Save guide'}
-                </Text>
-              </>
-            )}
-          </Pressable>
+                  <Text
+                    style={[
+                      styles.saveGuideButtonText,
+                      isSaved &&
+                        styles.saveGuideButtonTextSaved,
+                    ]}
+                  >
+                    {isSaved
+                      ? 'Saved to profile'
+                      : 'Save guide'}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          ) : null}
 
           {/* ITINERARY */}
 
@@ -1571,6 +1614,11 @@ const styles =
     headerSaveButtonActive: {
       backgroundColor:
         '#1769E8',
+    },
+
+    headerActionSpacer: {
+      width: 40,
+      height: 40,
     },
 
     content: {
