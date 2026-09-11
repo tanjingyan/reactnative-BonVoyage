@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   Alert,
@@ -12,92 +12,64 @@ import {
   View,
 } from 'react-native';
 
-import {
-  router,
-  useLocalSearchParams,
-} from 'expo-router';
-
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { router } from 'expo-router';
 
 import {
   addDoc,
   collection,
-  doc,
-  getDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 
-import { db } from '@/firebase/firebaseConfig';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
-type Trip = {
-  startDate: string;
-  endDate: string;
-};
+import {
+  auth,
+  db,
+} from '@/firebase/firebaseConfig';
 
-export default function AddActivityScreen() {
-  const { id } =
-    useLocalSearchParams<{
-      id: string;
-    }>();
-
+export default function CreateTripScreen() {
   const [
-    name,
-    setName,
+    title,
+    setTitle,
   ] = useState('');
 
   const [
-    location,
-    setLocation,
+    destination,
+    setDestination,
   ] = useState('');
 
   const [
-    activityDate,
-    setActivityDate,
+    startDate,
+    setStartDate,
   ] =
     useState<Date | null>(
       null
     );
 
   const [
-    activityTime,
-    setActivityTime,
+    endDate,
+    setEndDate,
   ] =
     useState<Date | null>(
       null
     );
+
+  const [
+    showStartPicker,
+    setShowStartPicker,
+  ] =
+    useState(false);
+
+  const [
+    showEndPicker,
+    setShowEndPicker,
+  ] =
+    useState(false);
 
   const [
     notes,
     setNotes,
   ] = useState('');
-
-  const [
-    tripStartDate,
-    setTripStartDate,
-  ] =
-    useState<Date | null>(
-      null
-    );
-
-  const [
-    tripEndDate,
-    setTripEndDate,
-  ] =
-    useState<Date | null>(
-      null
-    );
-
-  const [
-    showDatePicker,
-    setShowDatePicker,
-  ] =
-    useState(false);
-
-  const [
-    showTimePicker,
-    setShowTimePicker,
-  ] =
-    useState(false);
 
   const [
     loading,
@@ -106,83 +78,7 @@ export default function AddActivityScreen() {
     useState(false);
 
   // ========================================================
-  // LOAD TRIP DATES
-  // ========================================================
-
-  useEffect(() => {
-    async function loadTripDates() {
-      if (!id) {
-        return;
-      }
-
-      try {
-        const tripRef =
-          doc(
-            db,
-            'trips',
-            id
-          );
-
-        const tripSnapshot =
-          await getDoc(
-            tripRef
-          );
-
-        if (
-          !tripSnapshot.exists()
-        ) {
-          Alert.alert(
-            'Error',
-            'Trip not found.'
-          );
-
-          router.back();
-
-          return;
-        }
-
-        const trip =
-          tripSnapshot.data() as Trip;
-
-        const start =
-          new Date(
-            trip.startDate
-          );
-
-        const end =
-          new Date(
-            trip.endDate
-          );
-
-        setTripStartDate(
-          start
-        );
-
-        setTripEndDate(
-          end
-        );
-
-        setActivityDate(
-          start
-        );
-      } catch (error) {
-        console.log(
-          'Load trip dates error:',
-          error
-        );
-
-        Alert.alert(
-          'Error',
-          'Unable to load the trip information.'
-        );
-      }
-    }
-
-    loadTripDates();
-  }, [id]);
-
-  // ========================================================
-  // FORMATTERS
+  // DATE FORMATTER
   // ========================================================
 
   function formatDate(
@@ -207,70 +103,62 @@ export default function AddActivityScreen() {
     );
   }
 
-  function formatTime(
-    date: Date | null
-  ) {
-    if (!date) {
-      return 'Select time';
-    }
-
-    return date.toLocaleTimeString(
-      'en-GB',
-      {
-        hour:
-          '2-digit',
-
-        minute:
-          '2-digit',
-      }
-    );
-  }
-
   // ========================================================
-  // ADD ACTIVITY
+  // CREATE TRIP
   // ========================================================
 
-  async function handleAddActivity() {
-    if (!id) {
+  async function handleCreateTrip() {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
       Alert.alert(
         'Error',
-        'Trip ID is missing.'
+        'You must be logged in.'
       );
 
       return;
     }
 
-    if (!name.trim()) {
+    if (!title.trim()) {
       Alert.alert(
         'Error',
-        'Please enter an activity name.'
+        'Please enter a trip name.'
       );
 
       return;
     }
 
-    if (!location.trim()) {
+    if (
+      !destination.trim()
+    ) {
       Alert.alert(
         'Error',
-        'Please enter a location.'
+        'Please enter a destination.'
       );
 
       return;
     }
 
-    if (!activityDate) {
+    if (
+      !startDate ||
+      !endDate
+    ) {
       Alert.alert(
         'Error',
-        'Please select a date.'
+        'Please select your travel dates.'
       );
 
       return;
     }
 
-    if (!activityTime) {
+    if (
+      endDate <
+      startDate
+    ) {
       Alert.alert(
         'Error',
-        'Please select a time.'
+        'End date cannot be before the start date.'
       );
 
       return;
@@ -284,34 +172,23 @@ export default function AddActivityScreen() {
       await addDoc(
         collection(
           db,
-          'trips',
-          id,
-          'activities'
+          'trips'
         ),
         {
-          name:
-            name.trim(),
+          userId:
+            user.uid,
 
-          location:
-            location.trim(),
+          title:
+            title.trim(),
 
-          date:
-            activityDate.toISOString(),
+          destination:
+            destination.trim(),
 
-          time:
-            activityTime.toLocaleTimeString(
-              'en-GB',
-              {
-                hour:
-                  '2-digit',
+          startDate:
+            startDate.toISOString(),
 
-                minute:
-                  '2-digit',
-
-                hour12:
-                  false,
-              }
-            ),
+          endDate:
+            endDate.toISOString(),
 
           notes:
             notes.trim(),
@@ -322,20 +199,20 @@ export default function AddActivityScreen() {
       );
 
       Alert.alert(
-        'Activity Added',
-        'Your activity has been added to the itinerary.'
+        'Trip Created',
+        'Your trip has been saved successfully.'
       );
 
       router.back();
     } catch (error) {
       console.log(
-        'Add activity error:',
+        'Create trip error:',
         error
       );
 
       Alert.alert(
         'Error',
-        'Unable to add the activity. Please try again.'
+        'Unable to create your trip. Please try again.'
       );
     } finally {
       setLoading(
@@ -401,13 +278,17 @@ export default function AddActivityScreen() {
               </Text>
             </Pressable>
 
-            <View>
+            <View
+              style={
+                styles.headerText
+              }
+            >
               <Text
                 style={
                   styles.title
                 }
               >
-                Add Activity
+                Plan a New Trip
               </Text>
 
               <Text
@@ -415,13 +296,13 @@ export default function AddActivityScreen() {
                   styles.subtitle
                 }
               >
-                Add something to your itinerary.
+                Start planning your next adventure.
               </Text>
             </View>
           </View>
 
           {/* ============================================= */}
-          {/* ACTIVITY NAME                                 */}
+          {/* TRIP NAME                                     */}
           {/* ============================================= */}
 
           <Text
@@ -429,27 +310,27 @@ export default function AddActivityScreen() {
               styles.label
             }
           >
-            Activity Name
+            Trip Name
           </Text>
 
           <TextInput
             style={
               styles.input
             }
-            placeholder="e.g. Shibuya Crossing"
+            placeholder="e.g. Japan Trip"
             placeholderTextColor="#9CA3AF"
             selectionColor="#1769E8"
             cursorColor="#1769E8"
             value={
-              name
+              title
             }
             onChangeText={
-              setName
+              setTitle
             }
           />
 
           {/* ============================================= */}
-          {/* LOCATION                                      */}
+          {/* DESTINATION                                   */}
           {/* ============================================= */}
 
           <Text
@@ -457,27 +338,27 @@ export default function AddActivityScreen() {
               styles.label
             }
           >
-            Location
+            Destination
           </Text>
 
           <TextInput
             style={
               styles.input
             }
-            placeholder="e.g. Shibuya, Tokyo"
+            placeholder="e.g. Tokyo, Japan"
             placeholderTextColor="#9CA3AF"
             selectionColor="#1769E8"
             cursorColor="#1769E8"
             value={
-              location
+              destination
             }
             onChangeText={
-              setLocation
+              setDestination
             }
           />
 
           {/* ============================================= */}
-          {/* DATE                                          */}
+          {/* START DATE                                    */}
           {/* ============================================= */}
 
           <Text
@@ -485,79 +366,86 @@ export default function AddActivityScreen() {
               styles.label
             }
           >
-            Date
+            Start Date
           </Text>
 
           <Pressable
             style={
-              styles.selectionInput
+              styles.dateInput
             }
             onPress={() =>
-              setShowDatePicker(
+              setShowStartPicker(
                 true
               )
             }
           >
             <Text
               style={[
-                styles.selectionText,
+                styles.dateText,
 
-                !activityDate &&
-                  styles.placeholder,
+                !startDate &&
+                  styles.placeholderText,
               ]}
             >
               {formatDate(
-                activityDate
+                startDate
               )}
             </Text>
 
             <Text
               style={
-                styles.icon
+                styles.calendarIcon
               }
             >
               📅
             </Text>
           </Pressable>
 
-          {showDatePicker &&
-            tripStartDate &&
-            tripEndDate && (
-              <DateTimePicker
-                value={
-                  activityDate ||
-                  tripStartDate
-                }
-                mode="date"
-                minimumDate={
-                  tripStartDate
-                }
-                maximumDate={
-                  tripEndDate
-                }
-                onChange={(
-                  event,
+          {showStartPicker && (
+            <DateTimePicker
+              value={
+                startDate ||
+                new Date()
+              }
+              mode="date"
+              minimumDate={
+                new Date()
+              }
+              onChange={(
+                event,
+                selectedDate
+              ) => {
+                setShowStartPicker(
+                  false
+                );
+
+                if (
+                  event.type ===
+                    'set' &&
                   selectedDate
-                ) => {
-                  setShowDatePicker(
-                    false
+                ) {
+                  setStartDate(
+                    selectedDate
                   );
 
+                  // Reset end date if it is
+                  // before the new start date.
                   if (
-                    event.type ===
-                      'set' &&
-                    selectedDate
+                    endDate &&
+                    selectedDate >
+                      endDate
                   ) {
-                    setActivityDate(
-                      selectedDate
+                    setEndDate(
+                      null
                     );
                   }
-                }}
-              />
-            )}
+                }
+              }}
+            />
+          )}
 
           {/* ============================================= */}
-          {/* TIME                                          */}
+          {/* END DATE                                      */}
           {/* ============================================= */}
 
           <Text
@@ -565,66 +453,68 @@ export default function AddActivityScreen() {
               styles.label
             }
           >
-            Time
+            End Date
           </Text>
 
           <Pressable
             style={
-              styles.selectionInput
+              styles.dateInput
             }
             onPress={() =>
-              setShowTimePicker(
+              setShowEndPicker(
                 true
               )
             }
           >
             <Text
               style={[
-                styles.selectionText,
+                styles.dateText,
 
-                !activityTime &&
-                  styles.placeholder,
+                !endDate &&
+                  styles.placeholderText,
               ]}
             >
-              {formatTime(
-                activityTime
+              {formatDate(
+                endDate
               )}
             </Text>
 
             <Text
               style={
-                styles.icon
+                styles.calendarIcon
               }
             >
-              🕒
+              📅
             </Text>
           </Pressable>
 
-          {showTimePicker && (
+          {showEndPicker && (
             <DateTimePicker
               value={
-                activityTime ||
+                endDate ||
+                startDate ||
                 new Date()
               }
-              mode="time"
-              is24Hour={
-                false
+              mode="date"
+              minimumDate={
+                startDate ||
+                new Date()
               }
               onChange={(
                 event,
-                selectedTime
+                selectedDate
               ) => {
-                setShowTimePicker(
+                setShowEndPicker(
                   false
                 );
 
                 if (
                   event.type ===
                     'set' &&
-                  selectedTime
+                  selectedDate
                 ) {
-                  setActivityTime(
-                    selectedTime
+                  setEndDate(
+                    selectedDate
                   );
                 }
               }}
@@ -648,7 +538,7 @@ export default function AddActivityScreen() {
               styles.input,
               styles.notes,
             ]}
-            placeholder="Optional notes..."
+            placeholder="Anything you'd like to remember?"
             placeholderTextColor="#9CA3AF"
             selectionColor="#1769E8"
             cursorColor="#1769E8"
@@ -663,7 +553,7 @@ export default function AddActivityScreen() {
           />
 
           {/* ============================================= */}
-          {/* ADD BUTTON                                    */}
+          {/* CREATE TRIP                                   */}
           {/* ============================================= */}
 
           <Pressable
@@ -673,11 +563,11 @@ export default function AddActivityScreen() {
               loading &&
                 styles.buttonDisabled,
             ]}
+            onPress={
+              handleCreateTrip
+            }
             disabled={
               loading
-            }
-            onPress={
-              handleAddActivity
             }
           >
             <Text
@@ -686,8 +576,8 @@ export default function AddActivityScreen() {
               }
             >
               {loading
-                ? 'Adding Activity...'
-                : 'Add Activity'}
+                ? 'Creating Trip...'
+                : 'Create Trip'}
             </Text>
           </Pressable>
         </ScrollView>
@@ -722,9 +612,16 @@ const styles =
       paddingTop:
         60,
 
+      // Gives Notes and the Create Trip
+      // button enough room to scroll
+      // above the Android keyboard.
       paddingBottom:
         160,
     },
+
+    // ======================================================
+    // HEADER
+    // ======================================================
 
     header: {
       flexDirection:
@@ -738,14 +635,16 @@ const styles =
     },
 
     backButton: {
-      width: 40,
+      width:
+        40,
 
-      height: 40,
-
-      justifyContent:
-        'center',
+      height:
+        40,
 
       alignItems:
+        'center',
+
+      justifyContent:
         'center',
 
       marginRight:
@@ -759,8 +658,15 @@ const styles =
       lineHeight:
         38,
 
+      fontWeight:
+        '400',
+
       color:
         '#111827',
+    },
+
+    headerText: {
+      flex: 1,
     },
 
     title: {
@@ -776,7 +682,7 @@ const styles =
 
     subtitle: {
       marginTop:
-        5,
+        6,
 
       fontSize:
         16,
@@ -784,6 +690,10 @@ const styles =
       color:
         '#6B7280',
     },
+
+    // ======================================================
+    // FORM
+    // ======================================================
 
     label: {
       marginBottom:
@@ -821,6 +731,8 @@ const styles =
       fontSize:
         16,
 
+      // Important for physical Android
+      // devices using Dark Mode.
       color:
         '#111827',
 
@@ -828,7 +740,11 @@ const styles =
         '#FFFFFF',
     },
 
-    selectionInput: {
+    // ======================================================
+    // DATE INPUT
+    // ======================================================
+
+    dateInput: {
       height:
         48,
 
@@ -860,7 +776,7 @@ const styles =
         '#FFFFFF',
     },
 
-    selectionText: {
+    dateText: {
       fontSize:
         16,
 
@@ -868,15 +784,19 @@ const styles =
         '#111827',
     },
 
-    placeholder: {
+    placeholderText: {
       color:
         '#6B7280',
     },
 
-    icon: {
+    calendarIcon: {
       fontSize:
-        19,
+        20,
     },
+
+    // ======================================================
+    // NOTES
+    // ======================================================
 
     notes: {
       minHeight:
@@ -889,9 +809,13 @@ const styles =
         'top',
     },
 
+    // ======================================================
+    // BUTTON
+    // ======================================================
+
     button: {
       marginTop:
-        4,
+        6,
 
       paddingVertical:
         15,
