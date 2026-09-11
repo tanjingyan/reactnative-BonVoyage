@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
 import {
   AuthProvider,
@@ -18,80 +19,93 @@ function RootNavigator() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      {/* ===================================================== */}
-      {/* LOGGED OUT ROUTES                                    */}
-      {/* ===================================================== */}
+    <>
+      <StatusBar
+        hidden={false}
+        style="dark"
+      />
 
-      <Stack.Protected
-        guard={!user}
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: {
+            backgroundColor:
+              '#FFFFFF',
+          },
+        }}
       >
-        {/* Welcome page */}
-        <Stack.Screen
-          name="index"
-        />
+        {/* ===================================================== */}
+        {/* LOGGED OUT ROUTES                                    */}
+        {/* ===================================================== */}
 
-        {/* Login + Register */}
-        <Stack.Screen
-          name="(auth)"
-        />
-      </Stack.Protected>
+        <Stack.Protected
+          guard={!user}
+        >
+          {/* Welcome page */}
+          <Stack.Screen
+            name="index"
+          />
 
-      {/* LOGGED IN ROUTES                                     */}
+          {/* Login + Register */}
+          <Stack.Screen
+            name="(auth)"
+          />
+        </Stack.Protected>
 
-      <Stack.Protected
-        guard={!!user}
-      >
-        {/* Main application */}
-        <Stack.Screen
-          name="(tabs)"
-        />
+        {/* ===================================================== */}
+        {/* LOGGED IN ROUTES                                     */}
+        {/* ===================================================== */}
 
-        {/* Create Trip */}
-        <Stack.Screen
-          name="create-trip"
-        />
+        <Stack.Protected
+          guard={!!user}
+        >
+          {/* Main application */}
+          <Stack.Screen
+            name="(tabs)"
+          />
 
-        {/* Trip Details */}
-        <Stack.Screen
-          name="trip/[id]"
-        />
+          {/* Create Trip */}
+          <Stack.Screen
+            name="create-trip"
+          />
 
-        {/* Add Activity */}
-        <Stack.Screen
-          name="trip/[id]/add-activity"
-        />
+          {/* Trip Details */}
+          <Stack.Screen
+            name="trip/[id]"
+          />
 
-        {/* Activity Details */}
-        <Stack.Screen
-          name="trip/[id]/activity/[activityId]"
-        />
+          {/* Add Activity */}
+          <Stack.Screen
+            name="trip/[id]/add-activity"
+          />
 
-        {/* Trip Map */}
-        <Stack.Screen
-          name="trip/[id]/map"
-        />
+          {/* Activity Details */}
+          <Stack.Screen
+            name="trip/[id]/activity/[activityId]"
+          />
 
-        {/* Create Guide */}
-        <Stack.Screen
-          name="create-guide"
-        />
+          {/* Trip Map */}
+          <Stack.Screen
+            name="trip/[id]/map"
+          />
 
-        {/* Guide Details */}
-        <Stack.Screen
-          name="guide/[id]"
-        />
+          {/* Create Guide */}
+          <Stack.Screen
+            name="create-guide"
+          />
 
-        {/* Public Traveller Profile */}
-        <Stack.Screen
-          name="user/[id]"
-        />
-      </Stack.Protected>
-    </Stack>
+          {/* Guide Details */}
+          <Stack.Screen
+            name="guide/[id]"
+          />
+
+          {/* Public Traveller Profile */}
+          <Stack.Screen
+            name="user/[id]"
+          />
+        </Stack.Protected>
+      </Stack>
+    </>
   );
 }
 

@@ -1,35 +1,27 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
-
-import { Colors } from '@/constants/theme';
 
 export default function AppTabs() {
-  const scheme =
-    useColorScheme();
-
-  const colors =
-    Colors[
-      scheme === 'dark'
-        ? 'dark'
-        : 'light'
-    ];
-
   return (
     <NativeTabs
-      backgroundColor={
-        colors.background
-      }
+      backgroundColor="#FFFFFF"
 
-      indicatorColor={
-        colors.backgroundElement
-      }
+      indicatorColor="#EEF4FF"
 
-      // Keep ALL tab names visible
+      iconColor={{
+        default: '#4B5563',
+        selected: '#1769E8',
+      }}
+
       labelVisibilityMode="labeled"
 
       labelStyle={{
+        default: {
+          color: '#4B5563',
+        },
+
         selected: {
-          color: colors.text,
+          color: '#1769E8',
+          fontWeight: '600',
         },
       }}
     >

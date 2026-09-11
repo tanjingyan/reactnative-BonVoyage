@@ -1,5 +1,4 @@
 import {
-  DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from 'expo-router';
@@ -7,7 +6,6 @@ import {
 import {
   StyleSheet,
   View,
-  useColorScheme,
 } from 'react-native';
 
 import { StatusBar } from 'expo-status-bar';
@@ -16,28 +14,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppTabs from '@/components/app-tabs';
 
 export default function TabsLayout() {
-  const colorScheme =
-    useColorScheme();
-
   const insets =
     useSafeAreaInsets();
 
   return (
     <ThemeProvider
-      value={
-        colorScheme === 'dark'
-          ? DarkTheme
-          : DefaultTheme
-      }
+      value={DefaultTheme}
     >
       <View style={styles.container}>
+        {/* Always use dark Android status-bar icons
+            because BonVoyage has a light background */}
         <StatusBar
           hidden={false}
-          style={
-            colorScheme === 'dark'
-              ? 'light'
-              : 'dark'
-          }
+          style="dark"
         />
 
         <AppTabs />
@@ -73,7 +62,8 @@ const styles =
 
       height: 1,
 
-      backgroundColor: '#d2d2d2',
+      backgroundColor:
+        '#d2d2d2',
 
       zIndex: 999,
       elevation: 999,

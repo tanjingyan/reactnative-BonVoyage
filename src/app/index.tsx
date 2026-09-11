@@ -3,28 +3,144 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+
+import {
+  useRef,
+  useState,
+} from 'react';
 
 import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
+// ==========================================================
+// ONBOARDING PAGES
+// ==========================================================
+
+const onboardingPages = [
+  {
+    icon: 'airplane' as const,
+    title: 'BonVoyage',
+    tagline: 'Explore. Plan. Travel.',
+    description:
+      'Your journey starts here.',
+  },
+
+  {
+    icon: 'map-outline' as const,
+    title: 'Discover Places',
+    tagline: 'Find your next destination.',
+    description:
+      'Explore places, travel guides and other travellers.',
+  },
+
+  {
+    icon: 'calendar-outline' as const,
+    title: 'Plan Your Journey',
+    tagline: 'Everything in one place.',
+    description:
+      'Create trips, organise activities and build your itinerary.',
+  },
+];
+
+// ==========================================================
+// SCREEN
+// ==========================================================
+
 export default function WelcomeScreen() {
+  const {
+    width,
+  } =
+    useWindowDimensions();
+
+  const scrollRef =
+    useRef<ScrollView>(
+      null
+    );
+
+  const [
+    activePage,
+    setActivePage,
+  ] =
+    useState(0);
+
+  // ========================================================
+  // NAVIGATION
+  // ========================================================
+
   function goToRegister() {
-    router.push('/register');
+    router.push(
+      '/register'
+    );
   }
 
   function goToLogin() {
-    router.push('/login');
+    router.push(
+      '/login'
+    );
   }
+
+  // ========================================================
+  // PAGE SWIPE
+  // ========================================================
+
+  function handleScrollEnd(
+    event:
+      NativeSyntheticEvent<
+        NativeScrollEvent
+      >
+  ) {
+    const offsetX =
+      event.nativeEvent
+        .contentOffset.x;
+
+    const pageIndex =
+      Math.round(
+        offsetX /
+          width
+      );
+
+    setActivePage(
+      pageIndex
+    );
+  }
+
+  function goToPage(
+    index: number
+  ) {
+    setActivePage(
+      index
+    );
+
+    scrollRef.current
+      ?.scrollTo({
+        x:
+          index *
+          width,
+
+        animated:
+          true,
+      });
+  }
+
+  // ========================================================
+  // UI
+  // ========================================================
 
   return (
     <SafeAreaView
-      style={styles.safeArea}
+      style={
+        styles.safeArea
+      }
       edges={[
         'top',
         'bottom',
@@ -35,63 +151,157 @@ export default function WelcomeScreen() {
       />
 
       <View
-        style={styles.container}
+        style={
+          styles.container
+        }
       >
-        {/* LOGO */}
+        {/* =============================================== */}
+        {/* SWIPEABLE ONBOARDING                           */}
+        {/* =============================================== */}
+
+        <ScrollView
+          ref={
+            scrollRef
+          }
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={
+            false
+          }
+          bounces={
+            false
+          }
+          onMomentumScrollEnd={
+            handleScrollEnd
+          }
+          style={
+            styles.scrollView
+          }
+        >
+          {onboardingPages.map(
+            (
+              page,
+              index
+            ) => (
+              <View
+                key={
+                  index
+                }
+                style={[
+                  styles.page,
+
+                  {
+                    width,
+                  },
+                ]}
+              >
+                {/* LOGO / ICON */}
+
+                <View
+                  style={
+                    styles.logoIcon
+                  }
+                >
+                  <Ionicons
+                    name={
+                      page.icon
+                    }
+                    size={
+                      29
+                    }
+                    color="#1769E8"
+                  />
+                </View>
+
+                {/* TITLE */}
+
+                <Text
+                  style={
+                    styles.logoText
+                  }
+                >
+                  {
+                    page.title
+                  }
+                </Text>
+
+                {/* TAGLINE */}
+
+                <Text
+                  style={
+                    styles.tagline
+                  }
+                >
+                  {
+                    page.tagline
+                  }
+                </Text>
+
+                {/* DESCRIPTION */}
+
+                <Text
+                  style={
+                    styles.description
+                  }
+                >
+                  {
+                    page.description
+                  }
+                </Text>
+              </View>
+            )
+          )}
+        </ScrollView>
+
+        {/* =============================================== */}
+        {/* DOTS                                            */}
+        {/* =============================================== */}
 
         <View
-          style={styles.logoIcon}
+          style={
+            styles.dots
+          }
         >
-          <Ionicons
-            name="airplane"
-            size={29}
-            color="#1769E8"
-          />
+          {onboardingPages.map(
+            (
+              _,
+              index
+            ) => (
+              <Pressable
+                key={
+                  index
+                }
+                onPress={() =>
+                  goToPage(
+                    index
+                  )
+                }
+                hitSlop={
+                  10
+                }
+              >
+                <View
+                  style={[
+                    styles.dot,
+
+                    activePage ===
+                      index &&
+                      styles.activeDot,
+                  ]}
+                />
+              </Pressable>
+            )
+          )}
         </View>
 
-        <Text
-          style={styles.logoText}
-        >
-          BonVoyage
-        </Text>
-
-        <Text
-          style={styles.tagline}
-        >
-          Explore. Plan. Travel.
-        </Text>
-
-        <Text
-          style={styles.description}
-        >
-          Your journey starts here.
-        </Text>
-
-        {/* DOTS */}
-
-        <View
-          style={styles.dots}
-        >
-          <View
-            style={[
-              styles.dot,
-              styles.activeDot,
-            ]}
-          />
-
-          <View
-            style={styles.dot}
-          />
-
-          <View
-            style={styles.dot}
-          />
-        </View>
-
-        {/* GET STARTED */}
+        {/* =============================================== */}
+        {/* GET STARTED                                     */}
+        {/* =============================================== */}
 
         <Pressable
-          style={({ pressed }) => [
+          style={({
+            pressed,
+          }) => [
             styles.getStartedButton,
 
             pressed &&
@@ -110,10 +320,14 @@ export default function WelcomeScreen() {
           </Text>
         </Pressable>
 
-        {/* LOGIN */}
+        {/* =============================================== */}
+        {/* LOGIN                                           */}
+        {/* =============================================== */}
 
         <View
-          style={styles.loginRow}
+          style={
+            styles.loginRow
+          }
         >
           <Text
             style={
@@ -127,7 +341,9 @@ export default function WelcomeScreen() {
             onPress={
               goToLogin
             }
-            hitSlop={12}
+            hitSlop={
+              12
+            }
           >
             <Text
               style={
@@ -143,6 +359,10 @@ export default function WelcomeScreen() {
   );
 }
 
+// ==========================================================
+// STYLES
+// ==========================================================
+
 const styles =
   StyleSheet.create({
     safeArea: {
@@ -155,9 +375,6 @@ const styles =
     container: {
       flex: 1,
 
-      paddingHorizontal:
-        30,
-
       alignItems:
         'center',
 
@@ -166,6 +383,31 @@ const styles =
 
       backgroundColor:
         '#FFFFFF',
+    },
+
+    // ======================================================
+    // SWIPE PAGES
+    // ======================================================
+
+    scrollView: {
+      flexGrow: 0,
+
+      width:
+        '100%',
+
+      maxHeight:
+        300,
+    },
+
+    page: {
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal:
+        30,
     },
 
     // ======================================================
@@ -204,6 +446,9 @@ const styles =
       letterSpacing:
         -1.2,
 
+      textAlign:
+        'center',
+
       color:
         '#111827',
     },
@@ -218,6 +463,9 @@ const styles =
       fontWeight:
         '700',
 
+      textAlign:
+        'center',
+
       color:
         '#1769E8',
     },
@@ -226,8 +474,17 @@ const styles =
       marginTop:
         7,
 
+      paddingHorizontal:
+        20,
+
       fontSize:
         14,
+
+      lineHeight:
+        21,
+
+      textAlign:
+        'center',
 
       color:
         '#6B7280',
@@ -239,7 +496,7 @@ const styles =
 
     dots: {
       marginTop:
-        42,
+        30,
 
       flexDirection:
         'row',
@@ -291,7 +548,7 @@ const styles =
 
     getStartedButton: {
       width:
-        '100%',
+        '84%',
 
       height:
         52,
@@ -348,6 +605,9 @@ const styles =
     loginRow: {
       marginTop:
         19,
+
+      marginBottom:
+        30,
 
       flexDirection:
         'row',

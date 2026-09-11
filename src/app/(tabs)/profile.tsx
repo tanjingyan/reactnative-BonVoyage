@@ -76,7 +76,8 @@ type SavedContentTab =
 
 type SettingsPage =
   | 'main'
-  | 'personal';
+  | 'personal'
+  | 'preferences';
 
 type UserProfile = {
   displayName: string;
@@ -85,7 +86,17 @@ type UserProfile = {
   bio: string;
   location: string;
   photoURL: string | null;
+  interests: string[];
 };
+
+const TRAVEL_INTERESTS: string[] = [
+  'Food',
+  'Culture',
+  'Nature',
+  'Shopping',
+  'Attractions',
+  'Nightlife',
+];
 
 const DEFAULT_BIO =
   'Exploring the world one trip at a time ✈️';
@@ -181,6 +192,18 @@ export default function ProfileScreen() {
     setEditLocation,
   ] =
     useState('');
+
+  const [
+    editInterests,
+    setEditInterests,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    savingPreferences,
+    setSavingPreferences,
+  ] =
+    useState(false);
 
   const [
     savingProfile,
@@ -381,6 +404,24 @@ export default function ProfileScreen() {
                     )
                   : user.photoURL ??
                     null,
+
+              interests:
+                Array.isArray(
+                  data.travelPreferences
+                    ?.interests
+                )
+                  ? data.travelPreferences.interests
+                      .filter(
+                        (
+                          interest: unknown
+                        ) =>
+                          typeof interest ===
+                            'string' &&
+                          TRAVEL_INTERESTS.includes(
+                            interest
+                          )
+                      )
+                  : [],
             });
           } else {
             setProfile({
@@ -407,6 +448,9 @@ export default function ProfileScreen() {
               photoURL:
                 user.photoURL ||
                 null,
+
+              interests:
+                [],
             });
           }
 
@@ -445,6 +489,9 @@ export default function ProfileScreen() {
             photoURL:
               user.photoURL ||
               null,
+
+            interests:
+              [],
           });
 
           setProfileLoading(
@@ -1212,7 +1259,8 @@ export default function ProfileScreen() {
 
   function closeSettings() {
     if (
-      savingProfile
+      savingProfile ||
+      savingPreferences
     ) {
       return;
     }
@@ -1246,6 +1294,101 @@ export default function ProfileScreen() {
     setSettingsVisible(
       true
     );
+  }
+
+  function openTravelPreferences() {
+    setEditInterests(
+      profile?.interests ??
+        []
+    );
+
+    setSettingsPage(
+      'preferences'
+    );
+
+    setSettingsVisible(
+      true
+    );
+  }
+
+  function toggleTravelInterest(
+    interest: string
+  ) {
+    setEditInterests(
+      current =>
+        current.includes(
+          interest
+        )
+          ? current.filter(
+              item =>
+                item !==
+                interest
+            )
+          : [
+              ...current,
+              interest,
+            ]
+    );
+  }
+
+  async function saveTravelPreferences() {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please log in again before updating your travel preferences.'
+      );
+
+      return;
+    }
+
+    try {
+      setSavingPreferences(
+        true
+      );
+
+      await setDoc(
+        doc(
+          db,
+          'users',
+          user.uid
+        ),
+        {
+          travelPreferences: {
+            interests:
+              editInterests,
+          },
+
+          updatedAt:
+            serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      setSettingsPage(
+        'main'
+      );
+
+      Alert.alert(
+        'Preferences Updated',
+        'Your travel interests have been saved.'
+      );
+    } catch (error) {
+      console.log(
+        'Save travel preferences error:',
+        error
+      );
+
+      Alert.alert(
+        'Update Failed',
+        'Unable to update your travel preferences. Please try again.'
+      );
+    } finally {
+      setSavingPreferences(
+        false
+      );
+    }
   }
 
   async function savePersonalInformation() {
@@ -1419,19 +1562,6 @@ export default function ProfileScreen() {
             handleLogout,
         },
       ]
-    );
-  }
-
-  // ========================================================
-  // PLACEHOLDER ACTIONS
-  // ========================================================
-
-  function showComingSoon(
-    feature: string
-  ) {
-    Alert.alert(
-      feature,
-      'This feature will be connected next.'
     );
   }
 
@@ -2093,8 +2223,8 @@ export default function ProfileScreen() {
               style={[
                 styles.settingsSheet,
 
-                settingsPage ===
-                  'personal' &&
+                settingsPage !==
+                  'main' &&
                   styles.personalSettingsSheet,
               ]}
             >
@@ -2219,10 +2349,8 @@ export default function ProfileScreen() {
                     <SettingsItem
                       icon="heart-outline"
                       title="Travel Preferences"
-                      onPress={() =>
-                        showComingSoon(
-                          'Travel Preferences'
-                        )
+                      onPress={
+                        openTravelPreferences
                       }
                     />
 
@@ -2251,7 +2379,8 @@ export default function ProfileScreen() {
                     </Text>
                   </Pressable>
                 </>
-              ) : (
+              ) : settingsPage ===
+                'personal' ? (
                 <>
                   <View
                     style={
@@ -2653,6 +2782,247 @@ export default function ProfileScreen() {
                         {savingProfile
                           ? 'Saving...'
                           : 'Save changes'}
+                      </Text>
+                    </Pressable>
+                  </ScrollView>
+                </>
+              ) : (
+                <>
+                  <View
+                    style={
+                      styles.personalHeader
+                    }
+                  >
+                    <Pressable
+                      style={
+                        styles.personalBackButton
+                      }
+                      disabled={
+                        savingPreferences
+                      }
+                      onPress={() =>
+                        setSettingsPage(
+                          'main'
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name="arrow-back"
+                        size={21}
+                        color="#111827"
+                      />
+                    </Pressable>
+
+                    <View
+                      style={
+                        styles.personalHeaderText
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.personalTitle
+                        }
+                      >
+                        Travel Preferences
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.personalSubtitle
+                        }
+                      >
+                        Choose the types of travel experiences you enjoy
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      style={
+                        styles.closeButton
+                      }
+                      disabled={
+                        savingPreferences
+                      }
+                      onPress={
+                        closeSettings
+                      }
+                    >
+                      <Ionicons
+                        name="close"
+                        size={22}
+                        color="#111827"
+                      />
+                    </Pressable>
+                  </View>
+
+                  <ScrollView
+                    style={
+                      styles.personalFormScroll
+                    }
+                    contentContainerStyle={
+                      styles.personalFormContent
+                    }
+                    showsVerticalScrollIndicator={
+                      false
+                    }
+                  >
+                    <View
+                      style={
+                        styles.preferenceIntro
+                      }
+                    >
+                      <View
+                        style={
+                          styles.preferenceIcon
+                        }
+                      >
+                        <Ionicons
+                          name="heart"
+                          size={22}
+                          color="#1769E8"
+                        />
+                      </View>
+
+                      <View
+                        style={
+                          styles.preferenceIntroText
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.preferenceTitle
+                          }
+                        >
+                          Interests
+                        </Text>
+
+                        <Text
+                          style={
+                            styles.preferenceDescription
+                          }
+                        >
+                          Select all that apply. You can change these at any time.
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
+                      style={
+                        styles.interestsGrid
+                      }
+                    >
+                      {TRAVEL_INTERESTS.map(
+                        interest => {
+                          const selected =
+                            editInterests.includes(
+                              interest
+                            );
+
+                          return (
+                            <Pressable
+                              key={
+                                interest
+                              }
+                              style={[
+                                styles.interestChip,
+
+                                selected &&
+                                  styles.interestChipSelected,
+                              ]}
+                              onPress={() =>
+                                toggleTravelInterest(
+                                  interest
+                                )
+                              }
+                            >
+                              <Ionicons
+                                name={
+                                  getInterestIcon(
+                                    interest
+                                  )
+                                }
+                                size={18}
+                                color={
+                                  selected
+                                    ? '#1769E8'
+                                    : '#6B7280'
+                                }
+                              />
+
+                              <Text
+                                style={[
+                                  styles.interestChipText,
+
+                                  selected &&
+                                    styles.interestChipTextSelected,
+                                ]}
+                              >
+                                {interest}
+                              </Text>
+
+                              {selected ? (
+                                <Ionicons
+                                  name="checkmark-circle"
+                                  size={18}
+                                  color="#1769E8"
+                                />
+                              ) : null}
+                            </Pressable>
+                          );
+                        }
+                      )}
+                    </View>
+
+                    <Text
+                      style={
+                        styles.preferenceCount
+                      }
+                    >
+                      {editInterests.length ===
+                      0
+                        ? 'No interests selected'
+                        : `${editInterests.length} ${
+                            editInterests.length ===
+                            1
+                              ? 'interest'
+                              : 'interests'
+                          } selected`}
+                    </Text>
+
+                    <Pressable
+                      style={[
+                        styles.saveProfileButton,
+
+                        savingPreferences &&
+                          styles.saveProfileButtonDisabled,
+                      ]}
+                      disabled={
+                        savingPreferences
+                      }
+                      onPress={() =>
+                        void saveTravelPreferences()
+                      }
+                    >
+                      {savingPreferences ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#FFFFFF"
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark"
+                          size={20}
+                          color="#FFFFFF"
+                        />
+                      )}
+
+                      <Text
+                        style={
+                          styles.saveProfileText
+                        }
+                      >
+                        {savingPreferences
+                          ? 'Saving...'
+                          : 'Save preferences'}
                       </Text>
                     </Pressable>
                   </ScrollView>
@@ -3442,6 +3812,37 @@ function getInitials(
       parts.length - 1
     ][0]
   ).toUpperCase();
+}
+
+// ==========================================================
+// TRAVEL INTEREST ICON
+// ==========================================================
+
+function getInterestIcon(
+  interest: string
+): keyof typeof Ionicons.glyphMap {
+  switch (interest) {
+    case 'Food':
+      return 'restaurant-outline';
+
+    case 'Culture':
+      return 'library-outline';
+
+    case 'Nature':
+      return 'leaf-outline';
+
+    case 'Shopping':
+      return 'bag-handle-outline';
+
+    case 'Attractions':
+      return 'camera-outline';
+
+    case 'Nightlife':
+      return 'moon-outline';
+
+    default:
+      return 'heart-outline';
+  }
 }
 
 // ==========================================================
@@ -4686,6 +5087,132 @@ const styles =
       fontWeight: '800',
 
       color: '#FFFFFF',
+    },
+
+    // ------------------------------------------------------
+    // TRAVEL PREFERENCES
+    // ------------------------------------------------------
+
+    preferenceIntro: {
+      marginTop: 4,
+
+      padding: 16,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderRadius: 16,
+
+      backgroundColor:
+        '#F8FAFC',
+    },
+
+    preferenceIcon: {
+      width: 44,
+
+      height: 44,
+
+      borderRadius: 22,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    preferenceIntroText: {
+      flex: 1,
+
+      marginLeft: 12,
+    },
+
+    preferenceTitle: {
+      fontSize: 16,
+
+      fontWeight: '800',
+
+      color: '#111827',
+    },
+
+    preferenceDescription: {
+      marginTop: 4,
+
+      fontSize: 12,
+
+      lineHeight: 17,
+
+      color: '#6B7280',
+    },
+
+    interestsGrid: {
+      marginTop: 18,
+
+      flexDirection:
+        'row',
+
+      flexWrap:
+        'wrap',
+
+      gap: 10,
+    },
+
+    interestChip: {
+      minHeight: 46,
+
+      paddingHorizontal: 14,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E5E7EB',
+
+      borderRadius: 23,
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    interestChipSelected: {
+      borderColor:
+        '#1769E8',
+
+      backgroundColor:
+        '#EEF4FF',
+    },
+
+    interestChipText: {
+      marginHorizontal: 7,
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      color: '#4B5563',
+    },
+
+    interestChipTextSelected: {
+      color: '#1769E8',
+    },
+
+    preferenceCount: {
+      marginTop: 14,
+
+      fontSize: 11,
+
+      color: '#6B7280',
     },
 
     // ------------------------------------------------------
