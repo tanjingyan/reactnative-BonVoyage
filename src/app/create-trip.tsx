@@ -1,374 +1,924 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import {
+  router,
+  useLocalSearchParams,
+} from 'expo-router';
+
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import {
   addDoc,
   collection,
+  doc,
+  getDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { db } from '@/firebase/firebaseConfig';
 
-import { auth, db } from '@/firebase/firebaseConfig';
+type Trip = {
+  startDate: string;
+  endDate: string;
+};
 
-export default function CreateTripScreen() {
-  const [title, setTitle] = useState('');
-  const [destination, setDestination] = useState('');
+export default function AddActivityScreen() {
+  const { id } =
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [
+    name,
+    setName,
+  ] = useState('');
 
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [
+    location,
+    setLocation,
+  ] = useState('');
 
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [
+    activityDate,
+    setActivityDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
 
-  function formatDate(date: Date | null) {
+  const [
+    activityTime,
+    setActivityTime,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [
+    notes,
+    setNotes,
+  ] = useState('');
+
+  const [
+    tripStartDate,
+    setTripStartDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [
+    tripEndDate,
+    setTripEndDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [
+    showDatePicker,
+    setShowDatePicker,
+  ] =
+    useState(false);
+
+  const [
+    showTimePicker,
+    setShowTimePicker,
+  ] =
+    useState(false);
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+  // ========================================================
+  // LOAD TRIP DATES
+  // ========================================================
+
+  useEffect(() => {
+    async function loadTripDates() {
+      if (!id) {
+        return;
+      }
+
+      try {
+        const tripRef =
+          doc(
+            db,
+            'trips',
+            id
+          );
+
+        const tripSnapshot =
+          await getDoc(
+            tripRef
+          );
+
+        if (
+          !tripSnapshot.exists()
+        ) {
+          Alert.alert(
+            'Error',
+            'Trip not found.'
+          );
+
+          router.back();
+
+          return;
+        }
+
+        const trip =
+          tripSnapshot.data() as Trip;
+
+        const start =
+          new Date(
+            trip.startDate
+          );
+
+        const end =
+          new Date(
+            trip.endDate
+          );
+
+        setTripStartDate(
+          start
+        );
+
+        setTripEndDate(
+          end
+        );
+
+        setActivityDate(
+          start
+        );
+      } catch (error) {
+        console.log(
+          'Load trip dates error:',
+          error
+        );
+
+        Alert.alert(
+          'Error',
+          'Unable to load the trip information.'
+        );
+      }
+    }
+
+    loadTripDates();
+  }, [id]);
+
+  // ========================================================
+  // FORMATTERS
+  // ========================================================
+
+  function formatDate(
+    date: Date | null
+  ) {
     if (!date) {
       return 'Select date';
     }
 
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    return date.toLocaleDateString(
+      'en-GB',
+      {
+        day:
+          '2-digit',
+
+        month:
+          'short',
+
+        year:
+          'numeric',
+      }
+    );
   }
 
-  async function handleCreateTrip() {
-    const user = auth.currentUser;
-
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in.');
-      return;
+  function formatTime(
+    date: Date | null
+  ) {
+    if (!date) {
+      return 'Select time';
     }
 
-    if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a trip name.');
-      return;
-    }
+    return date.toLocaleTimeString(
+      'en-GB',
+      {
+        hour:
+          '2-digit',
 
-    if (!destination.trim()) {
-      Alert.alert('Error', 'Please enter a destination.');
-      return;
-    }
+        minute:
+          '2-digit',
+      }
+    );
+  }
 
-    if (!startDate || !endDate) {
-      Alert.alert('Error', 'Please select your travel dates.');
-      return;
-    }
+  // ========================================================
+  // ADD ACTIVITY
+  // ========================================================
 
-    if (endDate < startDate) {
+  async function handleAddActivity() {
+    if (!id) {
       Alert.alert(
         'Error',
-        'End date cannot be before the start date.'
+        'Trip ID is missing.'
       );
+
+      return;
+    }
+
+    if (!name.trim()) {
+      Alert.alert(
+        'Error',
+        'Please enter an activity name.'
+      );
+
+      return;
+    }
+
+    if (!location.trim()) {
+      Alert.alert(
+        'Error',
+        'Please enter a location.'
+      );
+
+      return;
+    }
+
+    if (!activityDate) {
+      Alert.alert(
+        'Error',
+        'Please select a date.'
+      );
+
+      return;
+    }
+
+    if (!activityTime) {
+      Alert.alert(
+        'Error',
+        'Please select a time.'
+      );
+
       return;
     }
 
     try {
-      setLoading(true);
+      setLoading(
+        true
+      );
 
-      await addDoc(collection(db, 'trips'), {
-        userId: user.uid,
+      await addDoc(
+        collection(
+          db,
+          'trips',
+          id,
+          'activities'
+        ),
+        {
+          name:
+            name.trim(),
 
-        title: title.trim(),
-        destination: destination.trim(),
+          location:
+            location.trim(),
 
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+          date:
+            activityDate.toISOString(),
 
-        notes: notes.trim(),
+          time:
+            activityTime.toLocaleTimeString(
+              'en-GB',
+              {
+                hour:
+                  '2-digit',
 
-        createdAt: serverTimestamp(),
-      });
+                minute:
+                  '2-digit',
+
+                hour12:
+                  false,
+              }
+            ),
+
+          notes:
+            notes.trim(),
+
+          createdAt:
+            serverTimestamp(),
+        }
+      );
 
       Alert.alert(
-        'Trip Created',
-        'Your trip has been saved successfully.'
+        'Activity Added',
+        'Your activity has been added to the itinerary.'
       );
 
       router.back();
     } catch (error) {
-      console.log('Create trip error:', error);
+      console.log(
+        'Add activity error:',
+        error
+      );
 
       Alert.alert(
         'Error',
-        'Unable to create your trip. Please try again.'
+        'Unable to add the activity. Please try again.'
       );
     } finally {
-      setLoading(false);
+      setLoading(
+        false
+      );
     }
   }
 
+  // ========================================================
+  // UI
+  // ========================================================
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
-
-        <View style={styles.headerText}>
-          <Text style={styles.title}>
-            Plan a New Trip
-          </Text>
-
-          <Text style={styles.subtitle}>
-            Start planning your next adventure.
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.label}>
-        Trip Name
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Japan Trip"
-        value={title}
-        onChangeText={setTitle}
-      />
-
-      <Text style={styles.label}>
-        Destination
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Tokyo, Japan"
-        value={destination}
-        onChangeText={setDestination}
-      />
-
-      <Text style={styles.label}>
-        Start Date
-      </Text>
-
-      <Pressable
-        style={styles.dateInput}
-        onPress={() => setShowStartPicker(true)}
+    <View
+      style={
+        styles.container
+      }
+    >
+      <KeyboardAvoidingView
+        style={
+          styles.keyboardView
+        }
+        behavior={
+          Platform.OS ===
+          'ios'
+            ? 'padding'
+            : 'height'
+        }
       >
-        <Text
-          style={[
-            styles.dateText,
-            !startDate && styles.placeholderText,
-          ]}
+        <ScrollView
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={
+            styles.scrollContent
+          }
         >
-          {formatDate(startDate)}
-        </Text>
+          {/* ============================================= */}
+          {/* HEADER                                        */}
+          {/* ============================================= */}
 
-        <Text style={styles.calendarIcon}>
-          📅
-        </Text>
-      </Pressable>
-
-      {showStartPicker && (
-        <DateTimePicker
-          value={startDate || new Date()}
-          mode="date"
-          minimumDate={new Date()}
-          onChange={(event, selectedDate) => {
-            setShowStartPicker(false);
-
-            if (event.type === 'set' && selectedDate) {
-              setStartDate(selectedDate);
-
-              // Reset end date if it is now before the new start date
-              if (endDate && selectedDate > endDate) {
-                setEndDate(null);
+          <View
+            style={
+              styles.header
+            }
+          >
+            <Pressable
+              style={
+                styles.backButton
               }
+              onPress={() =>
+                router.back()
+              }
+            >
+              <Text
+                style={
+                  styles.backArrow
+                }
+              >
+                ‹
+              </Text>
+            </Pressable>
+
+            <View>
+              <Text
+                style={
+                  styles.title
+                }
+              >
+                Add Activity
+              </Text>
+
+              <Text
+                style={
+                  styles.subtitle
+                }
+              >
+                Add something to your itinerary.
+              </Text>
+            </View>
+          </View>
+
+          {/* ============================================= */}
+          {/* ACTIVITY NAME                                 */}
+          {/* ============================================= */}
+
+          <Text
+            style={
+              styles.label
             }
-          }}
-        />
-      )}
+          >
+            Activity Name
+          </Text>
 
-      <Text style={styles.label}>
-        End Date
-      </Text>
-
-      <Pressable
-        style={styles.dateInput}
-        onPress={() => setShowEndPicker(true)}
-      >
-        <Text
-          style={[
-            styles.dateText,
-            !endDate && styles.placeholderText,
-          ]}
-        >
-          {formatDate(endDate)}
-        </Text>
-
-        <Text style={styles.calendarIcon}>
-          📅
-        </Text>
-      </Pressable>
-
-      {showEndPicker && (
-        <DateTimePicker
-          value={endDate || startDate || new Date()}
-          mode="date"
-          minimumDate={startDate || new Date()}
-          onChange={(event, selectedDate) => {
-            setShowEndPicker(false);
-
-            if (event.type === 'set' && selectedDate) {
-              setEndDate(selectedDate);
+          <TextInput
+            style={
+              styles.input
             }
-          }}
-        />
-      )}
+            placeholder="e.g. Shibuya Crossing"
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            value={
+              name
+            }
+            onChangeText={
+              setName
+            }
+          />
 
-      <Text style={styles.label}>
-        Notes
-      </Text>
+          {/* ============================================= */}
+          {/* LOCATION                                      */}
+          {/* ============================================= */}
 
-      <TextInput
-        style={[styles.input, styles.notes]}
-        placeholder="Anything you'd like to remember?"
-        multiline
-        value={notes}
-        onChangeText={setNotes}
-      />
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Location
+          </Text>
 
-      <Pressable
-        style={[
-          styles.button,
-          loading && styles.buttonDisabled,
-        ]}
-        onPress={handleCreateTrip}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Creating Trip...' : 'Create Trip'}
-        </Text>
-      </Pressable>
+          <TextInput
+            style={
+              styles.input
+            }
+            placeholder="e.g. Shibuya, Tokyo"
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            value={
+              location
+            }
+            onChangeText={
+              setLocation
+            }
+          />
+
+          {/* ============================================= */}
+          {/* DATE                                          */}
+          {/* ============================================= */}
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Date
+          </Text>
+
+          <Pressable
+            style={
+              styles.selectionInput
+            }
+            onPress={() =>
+              setShowDatePicker(
+                true
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.selectionText,
+
+                !activityDate &&
+                  styles.placeholder,
+              ]}
+            >
+              {formatDate(
+                activityDate
+              )}
+            </Text>
+
+            <Text
+              style={
+                styles.icon
+              }
+            >
+              📅
+            </Text>
+          </Pressable>
+
+          {showDatePicker &&
+            tripStartDate &&
+            tripEndDate && (
+              <DateTimePicker
+                value={
+                  activityDate ||
+                  tripStartDate
+                }
+                mode="date"
+                minimumDate={
+                  tripStartDate
+                }
+                maximumDate={
+                  tripEndDate
+                }
+                onChange={(
+                  event,
+                  selectedDate
+                ) => {
+                  setShowDatePicker(
+                    false
+                  );
+
+                  if (
+                    event.type ===
+                      'set' &&
+                    selectedDate
+                  ) {
+                    setActivityDate(
+                      selectedDate
+                    );
+                  }
+                }}
+              />
+            )}
+
+          {/* ============================================= */}
+          {/* TIME                                          */}
+          {/* ============================================= */}
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Time
+          </Text>
+
+          <Pressable
+            style={
+              styles.selectionInput
+            }
+            onPress={() =>
+              setShowTimePicker(
+                true
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.selectionText,
+
+                !activityTime &&
+                  styles.placeholder,
+              ]}
+            >
+              {formatTime(
+                activityTime
+              )}
+            </Text>
+
+            <Text
+              style={
+                styles.icon
+              }
+            >
+              🕒
+            </Text>
+          </Pressable>
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={
+                activityTime ||
+                new Date()
+              }
+              mode="time"
+              is24Hour={
+                false
+              }
+              onChange={(
+                event,
+                selectedTime
+              ) => {
+                setShowTimePicker(
+                  false
+                );
+
+                if (
+                  event.type ===
+                    'set' &&
+                  selectedTime
+                ) {
+                  setActivityTime(
+                    selectedTime
+                  );
+                }
+              }}
+            />
+          )}
+
+          {/* ============================================= */}
+          {/* NOTES                                         */}
+          {/* ============================================= */}
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Notes
+          </Text>
+
+          <TextInput
+            style={[
+              styles.input,
+              styles.notes,
+            ]}
+            placeholder="Optional notes..."
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            multiline
+            textAlignVertical="top"
+            value={
+              notes
+            }
+            onChangeText={
+              setNotes
+            }
+          />
+
+          {/* ============================================= */}
+          {/* ADD BUTTON                                    */}
+          {/* ============================================= */}
+
+          <Pressable
+            style={[
+              styles.button,
+
+              loading &&
+                styles.buttonDisabled,
+            ]}
+            disabled={
+              loading
+            }
+            onPress={
+              handleAddActivity
+            }
+          >
+            <Text
+              style={
+                styles.buttonText
+              }
+            >
+              {loading
+                ? 'Adding Activity...'
+                : 'Add Activity'}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-  },
+// ==========================================================
+// STYLES
+// ==========================================================
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 28,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
 
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
+      backgroundColor:
+        '#FFFFFF',
+    },
 
-  backArrow: {
-    fontSize: 38,
-    lineHeight: 38,
-    fontWeight: '400',
-    color: '#111827',
-  },
+    keyboardView: {
+      flex: 1,
+    },
 
-  headerText: {
-    flex: 1,
-  },
+    scrollContent: {
+      flexGrow: 1,
 
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-  },
+      paddingHorizontal:
+        24,
 
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginTop: 6,
-  },
+      paddingTop:
+        60,
 
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 7,
-  },
+      paddingBottom:
+        160,
+    },
 
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    fontSize: 16,
-    marginBottom: 18,
-  },
+    header: {
+      flexDirection:
+        'row',
 
-  dateInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    height: 48,
-    marginBottom: 18,
+      alignItems:
+        'flex-start',
 
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+      marginBottom:
+        28,
+    },
 
-    backgroundColor: '#FFFFFF',
-  },
+    backButton: {
+      width: 40,
 
-  dateText: {
-    fontSize: 16,
-    color: '#111827',
-  },
+      height: 40,
 
-  placeholderText: {
-    color: '#6B7280',
-  },
+      justifyContent:
+        'center',
 
-  calendarIcon: {
-    fontSize: 20,
-  },
+      alignItems:
+        'center',
 
-  notes: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
+      marginRight:
+        8,
+    },
 
-  button: {
-    backgroundColor: '#1769E8',
-    borderRadius: 12,
-    paddingVertical: 15,
-    marginTop: 6,
-  },
+    backArrow: {
+      fontSize:
+        38,
 
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+      lineHeight:
+        38,
 
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+      color:
+        '#111827',
+    },
+
+    title: {
+      fontSize:
+        30,
+
+      fontWeight:
+        '700',
+
+      color:
+        '#111827',
+    },
+
+    subtitle: {
+      marginTop:
+        5,
+
+      fontSize:
+        16,
+
+      color:
+        '#6B7280',
+    },
+
+    label: {
+      marginBottom:
+        7,
+
+      fontSize:
+        15,
+
+      fontWeight:
+        '600',
+
+      color:
+        '#111827',
+    },
+
+    input: {
+      marginBottom:
+        18,
+
+      paddingHorizontal:
+        15,
+
+      paddingVertical:
+        13,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius:
+        12,
+
+      fontSize:
+        16,
+
+      color:
+        '#111827',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    selectionInput: {
+      height:
+        48,
+
+      marginBottom:
+        18,
+
+      paddingHorizontal:
+        15,
+
+      borderWidth:
+        1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius:
+        12,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    selectionText: {
+      fontSize:
+        16,
+
+      color:
+        '#111827',
+    },
+
+    placeholder: {
+      color:
+        '#6B7280',
+    },
+
+    icon: {
+      fontSize:
+        19,
+    },
+
+    notes: {
+      minHeight:
+        110,
+
+      paddingTop:
+        14,
+
+      textAlignVertical:
+        'top',
+    },
+
+    button: {
+      marginTop:
+        4,
+
+      paddingVertical:
+        15,
+
+      borderRadius:
+        12,
+
+      backgroundColor:
+        '#1769E8',
+    },
+
+    buttonDisabled: {
+      opacity:
+        0.6,
+    },
+
+    buttonText: {
+      fontSize:
+        16,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'center',
+
+      color:
+        '#FFFFFF',
+    },
+  });

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
+
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -31,21 +35,66 @@ type Trip = {
 };
 
 export default function AddActivityScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } =
+    useLocalSearchParams<{
+      id: string;
+    }>();
 
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
-  const [activityDate, setActivityDate] = useState<Date | null>(null);
-  const [activityTime, setActivityTime] = useState<Date | null>(null);
-  const [notes, setNotes] = useState('');
+  const [name, setName] =
+    useState('');
 
-  const [tripStartDate, setTripStartDate] = useState<Date | null>(null);
-  const [tripEndDate, setTripEndDate] = useState<Date | null>(null);
+  const [location, setLocation] =
+    useState('');
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [
+    activityDate,
+    setActivityDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
 
-  const [loading, setLoading] = useState(false);
+  const [
+    activityTime,
+    setActivityTime,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [notes, setNotes] =
+    useState('');
+
+  const [
+    tripStartDate,
+    setTripStartDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [
+    tripEndDate,
+    setTripEndDate,
+  ] =
+    useState<Date | null>(
+      null
+    );
+
+  const [
+    showDatePicker,
+    setShowDatePicker,
+  ] =
+    useState(false);
+
+  const [
+    showTimePicker,
+    setShowTimePicker,
+  ] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
 
   useEffect(() => {
     async function loadTripDates() {
@@ -54,26 +103,60 @@ export default function AddActivityScreen() {
       }
 
       try {
-        const tripRef = doc(db, 'trips', id);
-        const tripSnapshot = await getDoc(tripRef);
+        const tripRef =
+          doc(
+            db,
+            'trips',
+            id
+          );
 
-        if (!tripSnapshot.exists()) {
-          Alert.alert('Error', 'Trip not found.');
+        const tripSnapshot =
+          await getDoc(
+            tripRef
+          );
+
+        if (
+          !tripSnapshot.exists()
+        ) {
+          Alert.alert(
+            'Error',
+            'Trip not found.'
+          );
+
           router.back();
+
           return;
         }
 
-        const trip = tripSnapshot.data() as Trip;
+        const trip =
+          tripSnapshot.data() as Trip;
 
-        const start = new Date(trip.startDate);
-        const end = new Date(trip.endDate);
+        const start =
+          new Date(
+            trip.startDate
+          );
 
-        setTripStartDate(start);
-        setTripEndDate(end);
+        const end =
+          new Date(
+            trip.endDate
+          );
 
-        setActivityDate(start);
+        setTripStartDate(
+          start
+        );
+
+        setTripEndDate(
+          end
+        );
+
+        setActivityDate(
+          start
+        );
       } catch (error) {
-        console.log('Load trip dates error:', error);
+        console.log(
+          'Load trip dates error:',
+          error
+        );
 
         Alert.alert(
           'Error',
@@ -85,52 +168,82 @@ export default function AddActivityScreen() {
     loadTripDates();
   }, [id]);
 
-  function formatDate(date: Date | null) {
+  function formatDate(
+    date: Date | null
+  ) {
     if (!date) {
       return 'Select date';
     }
 
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    return date.toLocaleDateString(
+      'en-GB',
+      {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }
+    );
   }
 
-  function formatTime(date: Date | null) {
+  function formatTime(
+    date: Date | null
+  ) {
     if (!date) {
       return 'Select time';
     }
 
-    return date.toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return date.toLocaleTimeString(
+      'en-GB',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    );
   }
 
   async function handleAddActivity() {
     if (!id) {
-      Alert.alert('Error', 'Trip ID is missing.');
+      Alert.alert(
+        'Error',
+        'Trip ID is missing.'
+      );
+
       return;
     }
 
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter an activity name.');
+      Alert.alert(
+        'Error',
+        'Please enter an activity name.'
+      );
+
       return;
     }
 
     if (!location.trim()) {
-      Alert.alert('Error', 'Please enter a location.');
+      Alert.alert(
+        'Error',
+        'Please enter a location.'
+      );
+
       return;
     }
 
     if (!activityDate) {
-      Alert.alert('Error', 'Please select a date.');
+      Alert.alert(
+        'Error',
+        'Please select a date.'
+      );
+
       return;
     }
 
     if (!activityTime) {
-      Alert.alert('Error', 'Please select a time.');
+      Alert.alert(
+        'Error',
+        'Please select a time.'
+      );
+
       return;
     }
 
@@ -138,22 +251,37 @@ export default function AddActivityScreen() {
       setLoading(true);
 
       await addDoc(
-        collection(db, 'trips', id, 'activities'),
+        collection(
+          db,
+          'trips',
+          id,
+          'activities'
+        ),
         {
-          name: name.trim(),
-          location: location.trim(),
+          name:
+            name.trim(),
 
-          date: activityDate.toISOString(),
+          location:
+            location.trim(),
 
-          time: activityTime.toLocaleTimeString('en-GB', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
+          date:
+            activityDate.toISOString(),
 
-          notes: notes.trim(),
+          time:
+            activityTime.toLocaleTimeString(
+              'en-GB',
+              {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+              }
+            ),
 
-          createdAt: serverTimestamp(),
+          notes:
+            notes.trim(),
+
+          createdAt:
+            serverTimestamp(),
         }
       );
 
@@ -164,7 +292,10 @@ export default function AddActivityScreen() {
 
       router.back();
     } catch (error) {
-      console.log('Add activity error:', error);
+      console.log(
+        'Add activity error:',
+        error
+      );
 
       Alert.alert(
         'Error',
@@ -176,260 +307,504 @@ export default function AddActivityScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
-
-        <View>
-          <Text style={styles.title}>Add Activity</Text>
-
-          <Text style={styles.subtitle}>
-            Add something to your itinerary.
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.label}>
-        Activity Name
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Shibuya Crossing"
-        value={name}
-        onChangeText={setName}
-      />
-
-      <Text style={styles.label}>
-        Location
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Shibuya, Tokyo"
-        value={location}
-        onChangeText={setLocation}
-      />
-
-      <Text style={styles.label}>
-        Date
-      </Text>
-
-      <Pressable
-        style={styles.selectionInput}
-        onPress={() => setShowDatePicker(true)}
+    <View
+      style={styles.container}
+    >
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : 'height'
+        }
       >
-        <Text
-          style={[
-            styles.selectionText,
-            !activityDate && styles.placeholder,
-          ]}
+        <ScrollView
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={
+            styles.scrollContent
+          }
         >
-          {formatDate(activityDate)}
-        </Text>
+          {/* HEADER */}
 
-        <Text style={styles.icon}>
-          📅
-        </Text>
-      </Pressable>
-
-      {showDatePicker &&
-        tripStartDate &&
-        tripEndDate && (
-          <DateTimePicker
-            value={activityDate || tripStartDate}
-            mode="date"
-            minimumDate={tripStartDate}
-            maximumDate={tripEndDate}
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
-
-              if (
-                event.type === 'set' &&
-                selectedDate
-              ) {
-                setActivityDate(selectedDate);
+          <View
+            style={styles.header}
+          >
+            <Pressable
+              style={
+                styles.backButton
               }
-            }}
-          />
-        )}
+              onPress={() =>
+                router.back()
+              }
+            >
+              <Text
+                style={
+                  styles.backArrow
+                }
+              >
+                ‹
+              </Text>
+            </Pressable>
 
-      <Text style={styles.label}>
-        Time
-      </Text>
+            <View>
+              <Text
+                style={
+                  styles.title
+                }
+              >
+                Add Activity
+              </Text>
 
-      <Pressable
-        style={styles.selectionInput}
-        onPress={() => setShowTimePicker(true)}
-      >
-        <Text
-          style={[
-            styles.selectionText,
-            !activityTime && styles.placeholder,
-          ]}
-        >
-          {formatTime(activityTime)}
-        </Text>
+              <Text
+                style={
+                  styles.subtitle
+                }
+              >
+                Add something to your itinerary.
+              </Text>
+            </View>
+          </View>
 
-        <Text style={styles.icon}>
-          🕒
-        </Text>
-      </Pressable>
+          {/* ACTIVITY NAME */}
 
-      {showTimePicker && (
-        <DateTimePicker
-          value={activityTime || new Date()}
-          mode="time"
-          is24Hour={false}
-          onChange={(event, selectedTime) => {
-            setShowTimePicker(false);
+          <Text
+            style={styles.label}
+          >
+            Activity Name
+          </Text>
 
-            if (
-              event.type === 'set' &&
-              selectedTime
-            ) {
-              setActivityTime(selectedTime);
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Shibuya Crossing"
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            value={name}
+            onChangeText={
+              setName
             }
-          }}
-        />
-      )}
+          />
 
-      <Text style={styles.label}>
-        Notes
-      </Text>
+          {/* LOCATION */}
 
-      <TextInput
-        style={[styles.input, styles.notes]}
-        placeholder="Optional notes..."
-        multiline
-        value={notes}
-        onChangeText={setNotes}
-      />
+          <Text
+            style={styles.label}
+          >
+            Location
+          </Text>
 
-      <Pressable
-        style={[
-          styles.button,
-          loading && styles.buttonDisabled,
-        ]}
-        disabled={loading}
-        onPress={handleAddActivity}
-      >
-        <Text style={styles.buttonText}>
-          {loading
-            ? 'Adding Activity...'
-            : 'Add Activity'}
-        </Text>
-      </Pressable>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Shibuya, Tokyo"
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            value={location}
+            onChangeText={
+              setLocation
+            }
+          />
+
+          {/* DATE */}
+
+          <Text
+            style={styles.label}
+          >
+            Date
+          </Text>
+
+          <Pressable
+            style={
+              styles.selectionInput
+            }
+            onPress={() =>
+              setShowDatePicker(
+                true
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.selectionText,
+
+                !activityDate &&
+                  styles.placeholder,
+              ]}
+            >
+              {formatDate(
+                activityDate
+              )}
+            </Text>
+
+            <Text
+              style={styles.icon}
+            >
+              📅
+            </Text>
+          </Pressable>
+
+          {showDatePicker &&
+            tripStartDate &&
+            tripEndDate && (
+              <DateTimePicker
+                value={
+                  activityDate ||
+                  tripStartDate
+                }
+                mode="date"
+                minimumDate={
+                  tripStartDate
+                }
+                maximumDate={
+                  tripEndDate
+                }
+                onChange={(
+                  event,
+                  selectedDate
+                ) => {
+                  setShowDatePicker(
+                    false
+                  );
+
+                  if (
+                    event.type ===
+                      'set' &&
+                    selectedDate
+                  ) {
+                    setActivityDate(
+                      selectedDate
+                    );
+                  }
+                }}
+              />
+            )}
+
+          {/* TIME */}
+
+          <Text
+            style={styles.label}
+          >
+            Time
+          </Text>
+
+          <Pressable
+            style={
+              styles.selectionInput
+            }
+            onPress={() =>
+              setShowTimePicker(
+                true
+              )
+            }
+          >
+            <Text
+              style={[
+                styles.selectionText,
+
+                !activityTime &&
+                  styles.placeholder,
+              ]}
+            >
+              {formatTime(
+                activityTime
+              )}
+            </Text>
+
+            <Text
+              style={styles.icon}
+            >
+              🕒
+            </Text>
+          </Pressable>
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={
+                activityTime ||
+                new Date()
+              }
+              mode="time"
+              is24Hour={false}
+              onChange={(
+                event,
+                selectedTime
+              ) => {
+                setShowTimePicker(
+                  false
+                );
+
+                if (
+                  event.type ===
+                    'set' &&
+                  selectedTime
+                ) {
+                  setActivityTime(
+                    selectedTime
+                  );
+                }
+              }}
+            />
+          )}
+
+          {/* NOTES */}
+
+          <Text
+            style={styles.label}
+          >
+            Notes
+          </Text>
+
+          <TextInput
+            style={[
+              styles.input,
+              styles.notes,
+            ]}
+            placeholder="Optional notes..."
+            placeholderTextColor="#9CA3AF"
+            selectionColor="#1769E8"
+            cursorColor="#1769E8"
+            multiline
+            textAlignVertical="top"
+            value={notes}
+            onChangeText={
+              setNotes
+            }
+          />
+
+          {/* BUTTON */}
+
+          <Pressable
+            style={[
+              styles.button,
+
+              loading &&
+                styles.buttonDisabled,
+            ]}
+            disabled={loading}
+            onPress={
+              handleAddActivity
+            }
+          >
+            <Text
+              style={
+                styles.buttonText
+              }
+            >
+              {loading
+                ? 'Adding Activity...'
+                : 'Add Activity'}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        '#FFFFFF',
+    },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 28,
-  },
+    keyboardView: {
+      flex: 1,
+    },
 
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
+    scrollContent: {
+      flexGrow: 1,
 
-  backArrow: {
-    fontSize: 38,
-    lineHeight: 38,
-    color: '#111827',
-  },
+      paddingHorizontal:
+        24,
 
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-  },
+      paddingTop:
+        60,
 
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginTop: 5,
-  },
+      // Important:
+      // lets Notes + button
+      // scroll above keyboard
+      paddingBottom:
+        160,
+    },
 
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 7,
-  },
+    header: {
+      flexDirection:
+        'row',
 
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    fontSize: 16,
-    marginBottom: 18,
-  },
+      alignItems:
+        'flex-start',
 
-  selectionInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    height: 48,
-    paddingHorizontal: 15,
-    marginBottom: 18,
+      marginBottom:
+        28,
+    },
 
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    backButton: {
+      width: 40,
+      height: 40,
 
-  selectionText: {
-    fontSize: 16,
-    color: '#111827',
-  },
+      justifyContent:
+        'center',
 
-  placeholder: {
-    color: '#6B7280',
-  },
+      alignItems:
+        'center',
 
-  icon: {
-    fontSize: 19,
-  },
+      marginRight:
+        8,
+    },
 
-  notes: {
-    minHeight: 90,
-    textAlignVertical: 'top',
-  },
+    backArrow: {
+      fontSize: 38,
+      lineHeight: 38,
 
-  button: {
-    backgroundColor: '#1769E8',
-    borderRadius: 12,
-    paddingVertical: 15,
-    marginTop: 4,
-  },
+      color:
+        '#111827',
+    },
 
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+    title: {
+      fontSize: 30,
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-});
+      fontWeight:
+        '700',
+
+      color:
+        '#111827',
+    },
+
+    subtitle: {
+      fontSize: 16,
+
+      color:
+        '#6B7280',
+
+      marginTop: 5,
+    },
+
+    label: {
+      fontSize: 15,
+
+      fontWeight:
+        '600',
+
+      marginBottom: 7,
+
+      color:
+        '#111827',
+    },
+
+    input: {
+      borderWidth: 1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius: 12,
+
+      paddingHorizontal:
+        15,
+
+      paddingVertical:
+        13,
+
+      fontSize: 16,
+
+      marginBottom:
+        18,
+
+      // Important for
+      // physical Android
+      color:
+        '#111827',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    selectionInput: {
+      borderWidth: 1,
+
+      borderColor:
+        '#D1D5DB',
+
+      borderRadius: 12,
+
+      height: 48,
+
+      paddingHorizontal:
+        15,
+
+      marginBottom:
+        18,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    selectionText: {
+      fontSize: 16,
+
+      color:
+        '#111827',
+    },
+
+    placeholder: {
+      color:
+        '#6B7280',
+    },
+
+    icon: {
+      fontSize: 19,
+    },
+
+    notes: {
+      minHeight: 100,
+
+      paddingTop: 14,
+
+      textAlignVertical:
+        'top',
+    },
+
+    button: {
+      backgroundColor:
+        '#1769E8',
+
+      borderRadius: 12,
+
+      paddingVertical:
+        15,
+
+      marginTop: 4,
+    },
+
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+
+    buttonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 16,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'center',
+    },
+  });

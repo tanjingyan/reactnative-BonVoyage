@@ -2,7 +2,10 @@ import { useState } from 'react';
 
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -499,6 +502,26 @@ export default function RegisterScreen() {
         styles.container
       }
     >
+      <KeyboardAvoidingView
+        style={
+          styles.keyboardView
+        }
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : 'height'
+        }
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={
+            styles.scrollContent
+          }
+        >
       <Text
         style={
           styles.title
@@ -649,6 +672,8 @@ export default function RegisterScreen() {
         placeholder="At least 6 characters"
         placeholderTextColor="#9CA3AF"
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
         value={
           password
         }
@@ -676,6 +701,8 @@ export default function RegisterScreen() {
         placeholder="Enter your password again"
         placeholderTextColor="#9CA3AF"
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
         value={
           confirmPassword
         }
@@ -738,6 +765,8 @@ export default function RegisterScreen() {
           Already have an account? Login
         </Text>
       </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -751,14 +780,28 @@ const styles =
     container: {
       flex: 1,
 
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    keyboardView: {
+      flex: 1,
+    },
+
+    scrollContent: {
+      flexGrow: 1,
+
       paddingHorizontal:
         28,
 
+      paddingTop:
+        40,
+
+      paddingBottom:
+        80,
+
       justifyContent:
         'center',
-
-      backgroundColor:
-        '#FFFFFF',
     },
 
     title: {

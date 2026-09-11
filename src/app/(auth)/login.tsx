@@ -177,6 +177,8 @@ export default function LoginScreen() {
         placeholder="Password"
         placeholderTextColor="#9CA3AF"
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
         value={
           password
         }
